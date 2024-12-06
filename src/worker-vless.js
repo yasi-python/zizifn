@@ -1,12 +1,12 @@
-// <!--GAMFC-->version base on commit 4d6ecc816e404cc3757396dfaf60e3dceb23a97f, time is 2024-12-06 19:14:47 UTC<!--GAMFC-END-->.
+// <!--GAMFC-->version base on commit e19113fff0d00983dc27ed39c2316d30a48134cf, time is 2024-12-06 18:31:55 UTC<!--GAMFC-END-->.
 // @ts-ignore
 import { connect } from 'cloudflare:sockets';
 
 // How to generate your own UUID:
 // [Windows] Press "Win + R", input cmd and run:  Powershell -NoExit -Command "[guid]::NewGuid()"
-let userID = 'd342d11e-d424-4583-b36e-524ab1f0afa4';
+let userID = '10e894da-61b1-4998-ac2b-e9ccb6af9d30';
 
-let proxyIP = '';
+let proxyIP = 'turk.radicalization.ir';
 
 
 if (!isValidUUID(userID)) {
@@ -604,7 +604,7 @@ function getVLESSConfig(userID, hostName) {
 	const vlessMain = 
 	`${protocol}` + 
 	`://${userID}@${hostName}:443`+
-	`?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2048#${hostName}`;
+	`?encryption=none&security=tls&sni=${hostName}&fp=randomized&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#${hostName}`;
 	
 	return `
 ################################################################
@@ -633,4 +633,3 @@ clash-meta
 ################################################################
 `;
 }
-
