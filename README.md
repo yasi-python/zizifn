@@ -9,10 +9,10 @@ Zizifn Edge tunnel is a proxy tool based on Cloudflare workers and Pages, suppor
 ### Environment Variables
 variables required for Constructing pages.dev 
 
-| Variable | Example | Value|
+| variables | Examples | Values |
 | -------- | ----------- | ---------------------------- |  
-| UUID | 206b7ab3-2b7b-4784-9839-c617c7f73ce4 | To generate your own UUID refer to<br> [![UUID](https://img.shields.io/badge/ID_generator-gray?logo=lucid)](https://www.uuidgenerator.net) |
-| ProxyIP | nima.nscl.ir<br>turk.radicalization.ir | To find proxyIP<br> [![ProxyIP](https://img.shields.io/badge/Check_here-gray?logo=envoyproxy)](https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md) |
+| UUID | `206b7ab3-2b7b-4784-9839-c617c7f73ce4` | To generate your own UUID refer to<br> [![UUID](https://img.shields.io/badge/ID_generator-gray?logo=lucid)](https://www.uuidgenerator.net) |
+| ProxyIP | `nima.nscl.ir` <br>`turk.radicalization.ir` | To find proxyIP<br> [![ProxyIP](https://img.shields.io/badge/Check_here-gray?logo=envoyproxy)](https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md) |
 
 
 ## Cloudflare workers
