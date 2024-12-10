@@ -1,8 +1,5 @@
 # zizifn
-
 Zizifn Edge tunnel is a proxy tool based on Cloudflare workers and Pages, supporting multiple protocols and configuration options.
-
-
 
 ## Cloudflare pages
 
@@ -25,12 +22,19 @@ and the ProxyIP can be adjusted from line `NINE`.
 
 You can find some "proxyIPs" [^3] from this great repository, and there is even a guide on how to find new proxies included in the repo.
 
+
+## View Configuration
+
+- Visit your domain: `https://your-domain.pages.dev`
+- Use specific UUID: `domain/uuid`
+- Get subscription content: visit `domain/uuid`
+- For Example: `https://zizifn-env.pages.dev/9ff8589993d34-4560-a1f0-5dc5b127fb00`
+
 ---
 
 ### Credits
 
 Many thanks to our awesome Chinese buddy, **zizifn!** [^4]  
-
 
 [^1]: [UUID Generator](https://www.uuidgenerator.net/)
 
