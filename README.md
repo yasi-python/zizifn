@@ -17,8 +17,8 @@ variables required for Constructing pages.dev
 If you intend to create a worker, you can proceed similarly to the page and utilize the same variables;
 
 however, it is also possible to modify them directly within the code.  
-To do this, you need to replace your "UUID" [^1] value in line `SEVEN` of "worker-vless.js file" [^2] ,
-and the ProxyIP can be adjusted from line `NINE`.  
+To do this, you need to replace your "UUID" [^1] value in line `23` of "src/worker-vless.js file" [^2] ,
+and the ProxyIP can be adjusted from line `26`.  
 
 You can find some "proxyIPs" [^3] from this great repository, and there is even a guide on how to find new proxies included in the repo.
 
