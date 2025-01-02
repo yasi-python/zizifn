@@ -1,10 +1,10 @@
 name: Add Version Comment
 
 on:
-  # trigger deployment on every push to main branch
+
   push:
     branches: [main]
-  # trigger deployment manually
+
   workflow_dispatch:
 
 permissions:
@@ -15,16 +15,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Modify version worker-vless.js
         uses: jaywcjlove/github-action-modify-file-content@main
         with:
           path: src/worker-vless.js
-          body: "Last update {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil, version base on commit ${{ github.sha }} "
-          message: "Update version worker-vless.js"
+          body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - NiREvil - version base on commit ${{ github.sha }} "
+          message: "Version Comment add successfully"
       - name: Modify version worker-with-socks5-experimental.js
         uses: jaywcjlove/github-action-modify-file-content@main
         with:
           path: src/worker-with-socks5-experimental.js
-          body: "Last update {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil, version base on commit ${{ github.sha }} "
-          message: "Update version worker-with-socks5-experimental.js"
+          body: "Last update {{date:YYYY-MM-DD HH:mm:ss}} UTC - NiREvil - version base on commit ${{ github.sha }} "
+          message: "Version Comment add successfully"
