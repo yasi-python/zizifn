@@ -51,9 +51,9 @@ export default {
             });
           case `/${userCode}`: {
             const streamConfig = getDianaConfig(userCode, request.headers.get('Host'));
-            return new Response(`${streamConfig}`, {
-              status: 200,
-              headers: { "Content-Type": "text/plain;charset=utf-8", }
+              return new Response(`${streamConfig}`, {
+                status: 200,
+                headers: { "Content-Type": "text/html;charset=utf-8", }
             });
           }
           default:
@@ -498,6 +498,8 @@ async function handleUDPOutBound(webSocket, streamResponseHeader, log) {
  * @copyright Chen, Yi-Cyuan 2014-2026
  * @license MIT
  */
+
+
 function getDianaConfig(userCode, hostName) {
   const protocol = decodeSecure(ENCODED.PROTOCOL);
   const networkType = decodeSecure(ENCODED.NETWORK);
@@ -506,52 +508,162 @@ function getDianaConfig(userCode, hostName) {
     `&security=tls&sni=${hostName}`;
   
   const freedomConfig =
-    `${baseUrl}?path=%2Fassets%2Fimages&eh=Sec-WebSocket-Protocol` +
+    `${baseUrl}?path=/api/v1&eh=Sec-WebSocket-Protocol` +
     `&ed=2560&${commonParams}&fp=firefox&alpn=h3#${hostName}`;
 
   const dreamConfig =
-    `${baseUrl}?path=%2Fassets%3Fed%3D2560&${commonParams}` +
+    `${baseUrl}?path=/api/v1?=ed=2560&${commonParams}` +
     `&fp=chrome&alpn=h2,http/1.1#${hostName}`;
 
   return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VLESS Configurations</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        .config-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .config-title {
+            font-size: 1.2em;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #eee;
+        }
+        .config-content {
+            position: relative;
+            background: #f8f9fa;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 15px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+        .copy-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: background 0.3s;
+        }
+        .copy-btn:hover {
+            background: #45a049;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 0.9em;
+        }
+        .attributes {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .attribute {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 5px;
+            font-size: 0.9em;
+        }
+        .attribute span {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>VLESS Configurations</h1>
+            <p>Select and copy the configuration that best suits your client</p>
+        </div>
 
-⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑
-${atob('VkxFU1MgY29uZmlnIGZvciB2MnJheU5HLCBIaWRkaWZ5LCBOaWthL01haHNhTkcsIFN0cmVpc2FuZCwgTmVrb3JheSAoWHJheSk=')}   ⁂
-*******************************************************************************
-${dreamConfig}
+        <div class="config-card">
+            <div class="config-title">v2rayNG - Hiddify Configuration</div>
+            <div class="config-content">
+                <button class="copy-btn" onclick="copyToClipboard(this, '${dreamConfig}')">Copy</button>
+                ${dreamConfig}
+            </div>
+            <div class="attributes">
+                <div class="attribute"><span>Protocol:</span> ${protocol}</div>
+                <div class="attribute"><span>Network:</span> ${networkType}</div>
+                <div class="attribute"><span>Security:</span> TLS</div>
+                <div class="attribute"><span>Fingerprint:</span> Chrome</div>
+            </div>
+        </div>
 
+        <div class="config-card">
+            <div class="config-title">Nekobox - Nekoray Configuration</div>
+            <div class="config-content">
+                <button class="copy-btn" onclick="copyToClipboard(this, '${freedomConfig}')">Copy</button>
+                ${freedomConfig}
+            </div>
+            <div class="attributes">
+                <div class="attribute"><span>Protocol:</span> ${protocol}</div>
+                <div class="attribute"><span>Network:</span> ${networkType}</div>
+                <div class="attribute"><span>Security:</span> TLS</div>
+                <div class="attribute"><span>Fingerprint:</span> Firefox</div>
+            </div>
+        </div>
 
+        <div class="footer">
+            <p>© 2025 REvil, All Rights Reserved</p>
+        </div>
+    </div>
 
-⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑
-${atob('VkxFU1MgY29uZmlndXJhdGlvbiBmb3IgTmVrb2JveCwgTmVrb3JheSAoc2luZ2JveCksIEthcmluZyAuLi4=')}            ⁂
-****************************************************************************
-${freedomConfig}
-
-
-
-⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑
-${atob('Q0xBU0ggcHJvdG9jb2wgY29uZmlndXJhdGlvbi4gQmVzdCBmb3IgQ2xhc2ggdXNlcnMgb24gbW9iaWxlIGRldmljZXMu')}     ⁂
-****************************************************************************
-- type: ${protocol}
-name: ${hostName}
-server: ${hostName}
-port: 443
-uuid: ${userCode}
-network: ${networkType}
-tls: true
-udp: false
-sni: ${hostName}
-client-fingerprint: chrome
-${networkType}-opts:
-    path: "/?ed=2048"
-    headers:
-    host: ${hostName}
-
-⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑⁑
-${atob('VEcgY2hhbm5lbDogaHR0cHM6Ly90Lm1lL3MvRl9OaVJFdmls')}        ⁂
-${atob('U3JjIGNvZGU6IGh0dHBzOi8vZ2l0aHViLmNvbS9OaVJFdmlsL3ppemlmbg==')} ⁂
-**********************************************
-`;
+    <script>
+        function copyToClipboard(button, text) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalText = button.textContent;
+                button.textContent = 'Copied!';
+                button.style.background = '#45a049';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#4CAF50';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
+  `;
 }
 
 /**
