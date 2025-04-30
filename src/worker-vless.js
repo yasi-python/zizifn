@@ -1,5 +1,3 @@
-// <!--GAMFC-->Last update: 2025-02-02 07:12:27 UTC - NiREvil - version base on commit f6e90bf6622e3073c54bcf29b5eb2b36a47a6736<!--GAMFC-END-->.
-// @ts-nocheck
 import { connect } from 'cloudflare:sockets';
 
 // basic encoding/decoding utilities
@@ -162,10 +160,10 @@ async function streamOverWSHandler(request) {
           );
         },
         close() {
-          log(`readableWebSocketStream is close`);
+          log('readableWebSocketStream is close');
         },
         abort(reason) {
-          log(`readableWebSocketStream is abort`, JSON.stringify(reason));
+          log('readableWebSocketStream is abort', JSON.stringify(reason));
         },
       }),
     )
@@ -342,7 +340,7 @@ function processStreamHeader(chunk, userCode) {
   if (!addressValue) {
     return {
       hasError: true,
-      message: `addressValue is empty`,
+      message: 'addressValue is empty',
     };
   }
 
@@ -433,20 +431,20 @@ async function remoteSocketToWS(remoteSocket, webSocket, streamResponseHeader, r
           }
         },
         close() {
-          log(`remoteConnection readable close`);
+          log('remoteConnection readable close');
         },
         abort(reason) {
-          console.error(`remoteConnection readable abort`, reason);
+          console.error('remoteConnection readable abort', reason);
         },
       }),
     )
     .catch(error => {
-      console.error(`remoteSocketToWS has error`, error.stack || error);
+      console.error('remoteSocketToWS has error', error.stack || error);
       safeCloseWebSocket(webSocket);
     });
 
   if (hasIncomingData === false && retry) {
-    log(`retry connection`);
+    log('retry connection');
     retry();
   }
 }
@@ -527,177 +525,505 @@ async function handleUDPOutBound(webSocket, streamResponseHeader, log) {
 /**
  *
  * we are all REvil
- * [js-sha256]{@link https://github.com/emn178/js-sha256}
- * @version 0.14.0 ()
+ * @version 0.11.0 ()
  * @description This code is based on the js-sha256 project, with the addition of the SHA-224 hash algorithm implementation.
- * @author Chen, Yi-Cyuan [emn178@gmail.com]
- * @copyright Chen, Yi-Cyuan 2014-2026
- * @license MIT
+ * @author Chen, Yi-Cyuan [emn178@gmail.com][js-sha256]{@link https://github.com/emn178/js-sha256}
  */
 
 function getDianaConfig(userCode, hostName) {
   const protocol = decodeSecure(ENCODED.PROTOCOL);
   const networkType = decodeSecure(ENCODED.NETWORK);
+
   const baseUrl = `${protocol}://${userCode}@${hostName}:443`;
   const commonParams =
     `encryption=none&host=${hostName}&type=${networkType}` + `&security=tls&sni=${hostName}`;
 
+  // Configuration for Sing-Box core clients
   const freedomConfig =
-    `${baseUrl}?path=/api/v1&eh=Sec-WebSocket-Protocol` +
-    `&ed=2560&${commonParams}&fp=firefox&alpn=h3#${hostName}`;
+    `${baseUrl}?path=/api/v4&eh=Sec-WebSocket-Protocol` +
+    `&ed=2560&${commonParams}&fp=chrome&alpn=h3#${hostName}`;
 
+  // Configuration for Xray core clients
   const dreamConfig =
-    `${baseUrl}?path=/api/v1?=ed=2560&${commonParams}` + `&fp=chrome&alpn=h2,http/1.1#${hostName}`;
+    `${baseUrl}?path=/api/v2?ed=2048&${commonParams}` +
+    `&fp=randomized&alpn=h2,http/1.1#${hostName}`;
 
+  // URL for Clash Meta subscription import
+  const clashMetaFullUrl = `clash://install-config?url=${encodeURIComponent(
+    `https://sub.victoriacross.ir/sub/clash-meta?url=${encodeURIComponent(freedomConfig)}&remote_config=&udp=true&ss_uot=false&show_host=false&forced_ws0rtt=false`,
+  )}`; // for using v2ray to clash-meta converter visit here: https://sub.victoriacross.ir/
+
+  // create a URL for NekoBox
+  const nekoBoxImportUrl = `https://sahar-km.github.io/arcane/${btoa(freedomConfig)}`;
+
+
+  // HTML content
   return `
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VLESS Configurations</title>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anonymous+Pro&family=Cardo:ital,wght@0,400;0,700;1,400&family=EB+Garamond:wght@400..800&family=Ibarra+Real+Nova:ital,wght@0,400..700;1,400..700&family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet">
+    <title>VLESS Proxy Configuration</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      @font-face {
+        font-family: 'Aldine401';
+        src: url('https://pub-6ca0f15ec8df4ddab5f387843d1cf0a7.r2.dev/Aldine401.woff2') format('woff2'),
+             url('https://pub-6ca0f15ec8df4ddab5f387843d1cf0a7.r2.dev/Aldine401.otf') format('opentype');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      :root {
+        --background-primary: #2A2421;
+        --background-secondary: #35302C;
+        --background-tertiary: #413B35;
+        --border-color: #5A4F45;
+        --border-color-hover: #766A5F;
+        --text-primary: #E5DFD6; 
+        --text-secondary: #B3A89D;    
+        --text-accent: #FFFFFF;
+        --accent-primary: #BE9B7B;     
+        --accent-secondary: #D4B595;   
+        --accent-tertiary: #8D6E5C;    
+        --accent-primary-darker: #8A6F56; 
+        --button-text-primary: #2A2421; 
+        --button-text-secondary: var(--text-primary);
+        --shadow-color: rgba(0, 0, 0, 0.35);
+        --shadow-color-accent: rgba(190, 155, 123, 0.4); 
+        --border-radius: 8px; 
+        --transition-speed: 0.2s;
+        --sans-serif: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        --serif: "Ibarra Real Nova", Georgia, serif;
+        --aldine-serif: "Aldine401", Helvetica, sans-serif;
+      }
+      
+        
+      body {
+        font-family: var(--sans-serif);
+        font-size: 16px;
+        font-weight: 400;
+        background-color: var(--background-primary);
+        color: var(--text-primary);
+        padding: 24px;
+        line-height: 1.5;
+      }
+
+      .container {
+        max-width: 800px; 
+        margin: 20px auto;
+        padding: 0 16px; 
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 40px;
+      }
+
+      .header h1 {
+        font-family: var(--aldine-serif);
+        font-weight: normal;
+        color: var(--text-accent);
+        font-size: 32px;
+        margin-bottom: 8px;
+      }
+      
+      .header p {
+        color: var(--text-secondary);
+        font-family: var(--sans-serif);
+        font-size: 12px;
+      }
+
+      .config-card {
+        background: var(--background-secondary);
+        border-radius: var(--border-radius);
+        padding: 20px; 
+        margin-bottom: 24px;
+        border: 1px solid var(--border-color);
+        transition: border-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+      }
+
+      .config-card:hover {
+         border-color: var(--border-color-hover);
+         box-shadow: 0 4px 8px var(--shadow-color);
+      }
+
+      .config-title {
+        font-family: var(--aldine-serif);
+        font-size: 22px; 
+        font-weight: normal;
+        color: var(--accent-secondary);
+        margin-bottom: 16px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .config-content {
+        position: relative;
+        font-family: "Ibarra Real Nova", serif;
+        font-optical-sizing: auto;
+        font-weight: 600;
+        font-style: normal;
+        background: var(--background-tertiary);
+        border-radius: var(--border-radius);
+        padding: 16px;
+        margin-bottom: 20px;
+        border: 1px solid var(--border-color);
+      }
+
+      .config-content pre {
+        overflow-x: auto;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.6;
+        color: var(--text-primary);
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      .attributes {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 20px; /* Increased gap */
+        margin-bottom: 16px;
+      }
+
+      .attribute {;
+        display: flex;
+        flex-direction: column;
+        gap: 4px; 
+      }
+
+      .attribute span {
+        font-size: 13px; 
+        font-weight: 500;
+        color: var(--text-secondary);
+      }
+
+      .attribute strong {
+        font-family: var(--aldine-serif);
+        font-size: 14px; 
+        font-weight: 600;
+        color: var(--accent-secondary);
+        word-break: break-all;
+      }
+
+      .button { 
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 8px 16px;
+        border-radius: var(--border-radius);
+        font-family: var(--sans-serif);
+        font-style: normal;
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        cursor: pointer;
+        border: 1px solid var(--border-color);
+        background-color: var(--background-tertiary);
+        color: var(--button-text-secondary);
+        transition: background-color var(--transition-speed) ease,
+        border-color var(--transition-speed) ease,
+        transform var(--transition-speed) ease,
+        box-shadow var(--transition-speed) ease;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+        position: relative; 
+        overflow: hidden; 
+      }
+
+      .button:hover {
+        background-color: #4D453E; 
+        border-color: var(--border-color-hover);
+        transform: translateY(-1px); 
+        box-shadow: 0 4px 8px var(--shadow-color);
+      }
+
+      .button:active {
+        transform: translateY(0px) scale(0.98);
+        box-shadow: none;
+      }
+
+      .button:focus-visible { 
+         outline: 2px solid var(--accent-primary);
+         outline-offset: 2px;
+      }
+
+      .copy-btn {
+        position: absolute;
+        top: 12px; 
+        right: 12px;
+        padding: 6px 12px;
+        font-family: var(--serif);
+        font-size: 12px;
+        font-weight: 600;
+        background-color: var(--accent-tertiary);
+        color: var(--text-accent);
+      }
+
+      .copy-btn:hover {
+        background-color: var(--accent-primary);
+      }
+
+      .client-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 12px;
+        margin-top: 16px;
+      }
+
+      .client-btn {
+         width: 100%;
+         background-color: var(--accent-primary);
+         color: var(--button-text-primary);
+         border-color: var(--accent-primary-darker);
+         position: relative;
+      }
+
+      /* Pulse animation for client buttons */
+      @keyframes pulse {
+        0% {
+          box-shadow: 0 0 0 0 rgba(190, 155, 123, 0.7);
         }
-        body {
-            background-color: #f5f5f5;
-            padding: 20px;
-            color: #333;
+        70% {
+          box-shadow: 0 0 0 10px rgba(190, 155, 123, 0);
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+        100% {
+          box-shadow: 0 0 0 0 rgba(190, 155, 123, 0);
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #2c3e50;
-        }
-        .config-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .config-title {
-            font-size: 1.2em;
-            color: #2c3e50;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #eee;
-        }
-        .config-content {
-            position: relative;
-            background: #f8f9fa;
-            border-radius: 5px;
-            padding: 15px;
-            margin-bottom: 15px;
-            word-break: break-all;
-            font-family: monospace;
-            font-size: 0.9em;
-            line-height: 1.4;
-        }
-        .copy-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 5px 10px;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 0.8em;
-            transition: background 0.3s;
-        }
-        .copy-btn:hover {
-            background: #45a049;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            color: #666;
-            font-size: 0.9em;
-        }
-        .attributes {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 10px;
-            margin-top: 15px;
-        }
-        .attribute {
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 5px;
-            font-size: 0.9em;
-        }
-        .attribute span {
-            font-weight: bold;
-            color: #2c3e50;
-        }
+      }
+
+      .client-btn:hover {
+        animation: pulse 1.5s infinite;
+        background-color: var(--accent-secondary);
+      }
+
+      .client-icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 4px;
+        background-color: #555; 
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0; 
+      }
+
+      .client-icon svg {
+         width: 14px; 
+         height: 14px;
+         fill: var(--accent-secondary); 
+      }
+
+      .footer {
+        text-align: center;
+        margin-top: 30px; 
+        padding-bottom: 20px;
+        color: var(--text-secondary);
+        font-size: 13px;
+      }
+
+      .footer p {
+          margin-bottom: 4px;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--background-primary);
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-color); /* Use border color for thumb */
+        border-radius: 4px;
+        border: 2px solid var(--background-primary);
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--border-color-hover); /* Lighter thumb on hover */
+      }
+      * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--border-color) var(--background-primary);
+      }
+
+      @media (max-width: 768px) {
+        body { padding: 16px; }
+        .container { padding: 0 8px; }
+        .header h1 { font-size: 24px; }
+        .header p { font-size: 11px; }
+        .config-card { padding: 16px; }
+        .config-title { font-size: 18px; }
+        .config-content pre { font-size: 12px; }
+        .attributes { grid-template-columns: 1fr; gap: 16px; }
+        .client-buttons { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+        .button { padding: 8px 12px; font-size: 13px; }
+        .copy-btn { top: 10px; right: 10px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { border-width: 1px; }
+      }
+
+      @media (max-width: 480px) {
+        .client-buttons { grid-template-columns: 1fr; } /* Stack buttons */
+      }
+      
+      .aldine-text {
+        font-family: var(--aldine-serif);
+        font-weight: normal;
+      }
+
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <div class="header">
-            <h1>VLESS Configurations</h1>
-            <p>Select and copy the configuration that best suits your client</p>
-        </div>
+      <div class="header">
+        <h1>VLESS Proxy Configuration</h1>
+        <p>Copy the configuration or import directly into your client</p>
+      </div>
 
-        <div class="config-card">
-            <div class="config-title">v2rayNG - Hiddify Configuration</div>
-            <div class="config-content">
-                <button class="copy-btn" onclick="copyToClipboard(this, '${dreamConfig}')">Copy</button>
-                ${dreamConfig}
-            </div>
-            <div class="attributes">
-                <div class="attribute"><span>Protocol:</span> ${protocol}</div>
-                <div class="attribute"><span>Network:</span> ${networkType}</div>
-                <div class="attribute"><span>Security:</span> TLS</div>
-                <div class="attribute"><span>Fingerprint:</span> Chrome</div>
-            </div>
-        </div>
+      <!-- Proxy Info Card -->
+      <div class="config-card">
+        <div class="config-title">Proxy Information</div>
+        <div class="attributes">
+          <div class="attribute">
+            <span>Proxy IP / Host:</span>
+            <strong>${proxyIP}</strong>
+          </div>
+          <div class="attribute">
+            <span>Status:</span>
+            <strong>Active</strong>
+          </div>
+          </div>
+      </div>
 
-        <div class="config-card">
-            <div class="config-title">Nekobox - Nekoray Configuration</div>
-            <div class="config-content">
-                <button class="copy-btn" onclick="copyToClipboard(this, '${freedomConfig}')">Copy</button>
-                ${freedomConfig}
-            </div>
-            <div class="attributes">
-                <div class="attribute"><span>Protocol:</span> ${protocol}</div>
-                <div class="attribute"><span>Network:</span> ${networkType}</div>
-                <div class="attribute"><span>Security:</span> TLS</div>
-                <div class="attribute"><span>Fingerprint:</span> Firefox</div>
-            </div>
+      <!-- Xray Core Clients -->
+      <div class="config-card">
+        <div class="config-title">Xray Core Clients</div>
+        <div class="config-content">
+          <button class="button copy-btn" onclick="copyToClipboard(this, '${dreamConfig}')">Copy</button>
+          <pre>${dreamConfig}</pre>
         </div>
+        <div class="client-buttons">
+          <!-- Hiddify -->
+          <a href="hiddify://install-config?url=${encodeURIComponent(freedomConfig)}" class="button client-btn">
+            <div class="client-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+              </svg>
+            </div>
+            Import to Hiddify
+          </a>
+          <!-- V2rayNG -->
+          <a href="v2rayng://install-config?url=${encodeURIComponent(dreamConfig)}" class="button client-btn">
+            <div class="client-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                 <path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" />
+              </svg>
+            </div>
+            Import to v2rayNG
+          </a>
+        </div>
+      </div>
+      <!-- Sing-Box Core Clients -->
+      <div class="config-card">
+        <div class="config-title">Sing-Box Core Clients</div>
+        <div class="config-content">
+          <button class="button copy-btn" onclick="copyToClipboard(this, '${freedomConfig}')">Copy</button>
+          <pre>${freedomConfig}</pre>
+        </div>
+        <div class="client-buttons">
+          <!-- Clash Meta -->
+          <a href="${clashMetaFullUrl}" class="button client-btn">
+            <div class="client-icon">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                  <path d="M4 4h16v16H4z" /> <path d="M10 10h4v4H10z" /> <path d="M14 8H10V4h4z" /> <path d="M4 14h4v4H4z" />
+              </svg>
+            </div>
+            Import to Clash Meta
+          </a>
+          <!-- NekoBox -->
+          <a href="${nekoBoxImportUrl}" class="button client-btn"> 
+            <div class="client-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+              </svg>
+            </div>
+            Import to NekoBox
+          </a>
 
-        <div class="footer">
-            <p>© 2025 REvil, All Rights Reserved</p>
         </div>
+      </div>
+      <div class="footer">
+        <p>© ${new Date().getFullYear()} REvil - All rights reserved. </p>
+        <p>Secure. Private. Fast.</p>
+      </div>
     </div>
-
     <script>
-        function copyToClipboard(button, text) {
-            navigator.clipboard.writeText(text).then(() => {
-                const originalText = button.textContent;
-                button.textContent = 'Copied!';
-                button.style.background = '#45a049';
-                setTimeout(() => {
-                    button.textContent = originalText;
-                    button.style.background = '#4CAF50';
-                }, 2000);
-            });
+      function copyToClipboard(button, text) {
+        navigator.clipboard.writeText(text).then(() => {
+          const originalText = button.textContent;
+          button.textContent = 'Copied!';
+          button.style.backgroundColor = 'var(--accent-primary)';
+          button.style.color = 'var(--button-text-primary)';
+          button.style.borderColor = 'var(--accent-primary-darker)';
+          button.disabled = true; // Disable briefly
+
+          setTimeout(() => {
+            button.textContent = originalText;
+            // Restore original styles explicitly
+            button.style.backgroundColor = 'var(--accent-tertiary)';
+            button.style.color = 'var(--text-accent)';
+            button.style.borderColor = 'var(--border-color)';
+            button.disabled = false;
+          }, 1200); // Slightly longer timeout
+        }).catch(err => {
+          console.error('Failed to copy text: ', err);
+          // Optional: Provide visual feedback for error
+          const originalText = button.textContent;
+          button.textContent = 'Error';
+          button.style.backgroundColor = '#8B3A2F';
+          button.style.color = '#FFFFFF';
+          button.style.borderColor = '#6B2D24';
+          button.disabled = true;
+           setTimeout(() => {
+            button.textContent = originalText;
+            button.style.backgroundColor = 'var(--accent-tertiary)';
+            button.style.color = 'var(--text-accent)';
+            button.style.borderColor = 'var(--border-color)';
+            button.disabled = false;
+          }, 1500);
+        });
+      }
+      
+      document.addEventListener('DOMContentLoaded', function () {
+        const proxyIPElement = document.getElementById('proxyIP');
+        if (proxyIPElement && proxyIPElement.innerText === '${proxyIP}') {
+          proxyIPElement.innerText = '192.168.1.1'; // Default placeholder
         }
+        if ('fonts' in document) {
+          document.fonts.ready.then(function() {
+            console.log('Fonts loaded!');
+      });
     </script>
-</body>
+  </body>
 </html>
-  `;
+`;
 }
 
 /**
