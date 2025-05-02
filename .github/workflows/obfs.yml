@@ -55,11 +55,9 @@ jobs:
         run: |
           git config --local user.email "135276904+Diana-Cl@users.noreply.github.com"
           git config --local user.name "Diana-Cl"
-          if [[ -f "obfuscated/_worker.js" ]]; then
-            git add obfuscated/_worker.js
-            git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
-          fi
-
+          git add _worker.js
+          git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
+          
       - name: Push Changes
         run: |
           git push origin ${{ github.head_ref || github.ref_name }}
