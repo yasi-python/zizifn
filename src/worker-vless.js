@@ -358,7 +358,6 @@ function processStreamHeader(chunk, userCode) {
 
 /**
  * Handles outbound TCP connections.
- *
  * @param {any} remoteSocket
  * @param {string} addressRemote The remote address to connect to.
  * @param {number} portRemote The remote port to connect to.
