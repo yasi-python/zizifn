@@ -1,8 +1,8 @@
-name: Obfs
+name: Code Obfuscation
 
 on:
   push:
-    branches: [main]
+    branches: [DEV]
   workflow_dispatch:
 
 jobs:
@@ -12,22 +12,32 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Use Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: "20"
-          check-latest: false
+          check-latest: true
 
-      - name: Install dependencies
+      - name: Cache Node Modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Dependencies
         run: npm install -g javascript-obfuscator
 
-      - name: Obfuscate code
+      - name: Obfuscate Code
         run: |
-          javascript-obfuscator src/worker-vless.js --output _worker.js \
+          mkdir -p obfuscated
+          javascript-obfuscator src/worker-vless.js --output obfuscated/_worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
@@ -41,13 +51,15 @@ jobs:
           --transform-object-keys true \
           --unicode-escape-sequence true
 
-      - name: Commit changes
+      - name: Commit Changes
         run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add _worker.js
-          git commit -m "Secured and refined _worker.js logic" || echo "No changes to commit"
+          git config --local user.email "135276904+Diana-Cl@users.noreply.github.com"
+          git config --local user.name "Diana-Cl"
+          if [[ -f "obfuscated/_worker.js" ]]; then
+            git add obfuscated/_worker.js
+            git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
+          fi
 
-      - name: Push changes
+      - name: Push Changes
         run: |
-          git push origin ${{ github.ref }}
+          git push origin ${{ github.head_ref || github.ref_name }}
