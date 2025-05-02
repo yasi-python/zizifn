@@ -37,7 +37,7 @@ jobs:
       - name: Obfuscate Code
         run: |
           mkdir -p obfuscated
-          javascript-obfuscator src/worker-vless.js --output obfuscated/_worker.js \
+          javascript-obfuscator src/worker-vless.js --output _worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
