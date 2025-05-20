@@ -37,14 +37,14 @@ jobs:
       - name: Obfuscate Code
         run: |
           mkdir -p obfuscated
-          javascript-obfuscator src/worker-vless.js --output _worker.js \
+          javascript-obfuscator src/worker-vless.js --output _worker.js --self-defending false \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
           --dead-code-injection true \
           --dead-code-injection-threshold 1 \
           --identifier-names-generator hexadecimal \
-          --rename-globals true \
+          --rename-globals false \
           --string-array true \
           --string-array-encoding 'rc4' \
           --string-array-threshold 1 \
