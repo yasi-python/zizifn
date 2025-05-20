@@ -6,38 +6,33 @@ on:
   workflow_dispatch:
 
 jobs:
-  obfuscate:
+  build_and_obfuscate:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout Code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Use Node.js 20.x
+        uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          check-latest: true
+          node-version: "20" 
+        # cache: 'npm'
 
-      - name: Cache Node Modules
-        uses: actions/cache@v3
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
+      - name: Generate intermediate worker file
+        run: node build-worker.js
 
-      - name: Install Dependencies
+      - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
-      - name: Obfuscate Code
+      - name: Obfuscate worker code
         run: |
-          mkdir -p obfuscated
-          javascript-obfuscator src/worker-vless.js --output _worker.js --self-defending false \
+          javascript-obfuscator _intermediate_worker.js --output _worker.js \
+          --self-defending false \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
@@ -51,13 +46,22 @@ jobs:
           --transform-object-keys true \
           --unicode-escape-sequence true
 
-      - name: Commit Changes
+      - name: Commit and push _worker.js
         run: |
           git config --local user.email "135276904+Diana-Cl@users.noreply.github.com"
           git config --local user.name "Diana-Cl"
           git add _worker.js
-          git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
+          if ! git diff --staged --quiet; then
+            git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
+          else
+            echo "No changes to commit for _worker.js"
+          fi
+
+      - name: Push changes
+        if: success()
+        uses: ad-m/github-push-action@master
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref }}
+          force: false 
           
-      - name: Push Changes
-        run: |
-          git push origin ${{ github.head_ref || github.ref_name }}
