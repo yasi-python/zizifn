@@ -20,7 +20,6 @@ let userCode = "10e894da-61b1-4998-ac2b-e9ccb6af9d30"; // Default UUID.
 let proxyIP = "turk.radicalization.ir"; // Default PROXYIP
 let dnsResolver = "1.1.1.1"; // Default DNS_RESOLVER
 const HTML_URL = "https://sahar-km.github.io/zx/"; // Panel UI HTML URL CONSTANTS.
-
 // Constants for WebSocket states 
 const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
@@ -644,9 +643,9 @@ async function getDianaConfig(currentUuid, hostName) {
       `encryption=none&host=${hostName}&type=${networkType}` +
       `&security=tls&sni=${hostName}`;
 
-    // paths /api/v2 and /index?ed=2560)
+    // paths /api/v6 and /index?ed=2560)
     const freedomConfig =
-      `${baseUrl}?path=/api/v2&eh=Sec-WebSocket-Protocol` +
+      `${baseUrl}?path=/api/v6&eh=Sec-WebSocket-Protocol` +
       `&ed=2560&${commonParams}&fp=chrome&alpn=h3#${hostName}`;
 
     const dreamConfig =
@@ -657,7 +656,7 @@ async function getDianaConfig(currentUuid, hostName) {
     const clashMetaFullUrl = `clash://install-config?url=${encodeURIComponent(
       `https://revil-sub.pages.dev/sub/clash-meta?url=${encodeURIComponent(
         freedomConfig
-      )}&remote_config=&udp=true&ss_uot=false&show_host=false&forced_ws0rtt=true`
+      )}&remote_config=&udp=true&ss_uot=false&show_host=false&forced_ws0rtt=false`
     )}`;
 
     const nekoBoxImportUrl = `https://sahar-km.github.io/arcane/${btoa(
@@ -677,6 +676,7 @@ async function getDianaConfig(currentUuid, hostName) {
 
     // Placeholder replacement (Configs generated logics)
     html = html
+      .replace(/<body(.*?)>/i, `<body$1 data-proxy-ip="${proxyIP}">`)
       .replace(/{{PROXY_IP}}/g, proxyIP) // proxyIP is a global variable
       .replace(
         /{{LAST_UPDATED}}/g,
