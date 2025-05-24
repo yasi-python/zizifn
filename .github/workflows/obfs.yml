@@ -1,8 +1,8 @@
 name: Code Obfuscation
 
 on:
-  push:
-    branches: [DEV]
+#  push:
+#    branches: [DEV]
   workflow_dispatch:
 
 jobs:
