@@ -6,24 +6,23 @@ on:
   workflow_dispatch:
 
 jobs:
-  build_and_obfuscate:
+  obfuscate:
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v3
         with:
-          node-version: "20" 
-        # cache: 'npm'
-        
-      - name: Install javascript-obfuscator
+          node-version: "20"
+          check-latest: false
+
+      - name: Install dependencies
         run: npm install -g javascript-obfuscator
 
       - name: Obfuscate worker code
@@ -48,16 +47,9 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add _worker.js
-          if ! git diff --staged --quiet; then
-            git commit -m "Secured and refined _worker.js logic" $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
-          else
-            echo "No changes to commit for _worker.js"
-          fi
+          git commit -m "Secured and refined _worker.js logic" || echo "No changes to commit"
 
       - name: Push changes
-        if: success()
-        uses: ad-m/github-push-action@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
+        run: |
+          git push origin ${{ github.ref }}
           force: false
