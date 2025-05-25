@@ -1,8 +1,8 @@
-name: Code Obfuscation
+name: Obfs
 
 on:
-#  push:
-#    branches: [DEV]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -17,21 +17,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Use Node.js 20.x
+      - name: Use Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20" 
         # cache: 'npm'
-
-      - name: Generate intermediate worker file
-        run: node build-worker.js
-
+        
       - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
       - name: Obfuscate worker code
         run: |
-          javascript-obfuscator _intermediate_worker.js --output _worker.js \
+          javascript-obfuscator index.js --output _worker.js \
           --self-defending false \
           --compact true \
           --control-flow-flattening true \
@@ -48,11 +45,11 @@ jobs:
 
       - name: Commit and push _worker.js
         run: |
-          git config --local user.email "135276904+Diana-Cl@users.noreply.github.com"
-          git config --local user.name "Diana-Cl"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
           git add _worker.js
           if ! git diff --staged --quiet; then
-            git commit -m "Obfuscated _worker.js on $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
+            git commit -m "Secured and refined _worker.js logic" $(date -u +"%Y-%m-%dT%H:%M:%SZ") [Run ID: ${{ github.run_id }}]" || echo "No changes to commit"
           else
             echo "No changes to commit for _worker.js"
           fi
@@ -63,5 +60,4 @@ jobs:
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
-          force: false 
-          
+          force: false
