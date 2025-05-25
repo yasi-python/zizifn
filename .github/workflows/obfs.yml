@@ -2,7 +2,7 @@ name: Obfs
 
 on:
   push:
-    branches: [main]
+    branches: [DEV]
   workflow_dispatch:
 
 jobs:
