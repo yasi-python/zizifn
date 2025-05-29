@@ -1,3 +1,4 @@
+// Last update: 2025-05-29 06:32:59 UTC - We are all REvil - version based on commit 4dbf9aec5a3e76e46936379ec5c34db131cc8acc
 import { connect } from "cloudflare:sockets";
 
 function encodeSecure(str) {
@@ -439,7 +440,8 @@ async function getDianaConfig(currentUuid, hostName) {
     return new Response(html, { headers: { "Content-Type": "text/html;charset=UTF-8" } });
   } catch (error) {
     console.error("Error in getDianaConfig:", error);
-    const errorHtml = `<!DOCTYPE html><html><head><title>Error</title></head><body><h1>Error</h1><p>Failed to load configuration page.</p><pre>${error.message}\n${error.stack}</pre></body></html>`;
+    const errorHtml = `<!DOCTYPE html><html><head><title>Error</title></head><body><h1>Error</h1><p>Failed to load configuration page.</p><pre>${error.message}
+${error.stack}</pre></body></html>`;
     return new Response(errorHtml, { status: 500, headers: { "Content-Type": "text/html;charset=UTF-8" } });
   }
 }
