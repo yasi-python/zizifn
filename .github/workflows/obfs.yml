@@ -46,11 +46,11 @@ jobs:
             --unicode-escape-sequence true
 
       - name: Add version comment to index.js
-        uses: jaywcjlove/github-action-modify-file-content@main
-        with:
-          path: index.js
-          body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil - version base on commit ${{ github.sha }} "
-          commitChange: false
+        run: |
+          VERSION_COMMENT="// Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC - We are all REvil - version based on commit ${{ github.sha }}"
+          grep -q "Last update:" index.js && \
+            sed -i "s|^// Last update:.*|$VERSION_COMMENT|" index.js || \
+            echo -e "$VERSION_COMMENT\n$(cat index.js)" > index.js
 
       - name: Skip if last commit was GitHub Action
         run: |
@@ -65,5 +65,5 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add _worker.js index.js
-          git commit -m "Automated build: obfuscation and version worker logic" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
+          git commit -m "Automated build: obfuscation and version update" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
           git push origin ${{ github.ref }}
