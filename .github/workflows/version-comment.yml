@@ -2,7 +2,7 @@ name: Add Version Comment
 
 on:
   push:
-    branches: ['main', 'DEV']
+    branches: [main]
     paths:
       - '**/index.*'
       - '**/obfs.*'
@@ -17,10 +17,10 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-      - name: Modify version worker-vless.js
+      - name: Modify worker code version
         uses: jaywcjlove/github-action-modify-file-content@main
         with:
-          path: _worker.js
-          body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - REvil - version base on commit ${{ github.sha }} "
+          path: index.js
+          body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil - version base on commit ${{ github.sha }} "
           message: "Version Comment add successfully"
           
