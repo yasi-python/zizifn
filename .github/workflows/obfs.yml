@@ -45,11 +45,14 @@ jobs:
             --transform-object-keys true \
             --unicode-escape-sequence true
 
-      - name: Add version comment to _worker.js
+      - name: Add multiline version comment to _worker.js
         run: |
           if [ -s _worker.js ]; then
             VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
-            echo -e "$VERSION_BLOCK\n\n$(cat _worker.js)" > _worker_temp.js
+            {
+              printf '%b\n\n' "$VERSION_BLOCK"
+              cat _worker.js
+            } > _worker_temp.js
             mv _worker_temp.js _worker.js
           else
             echo "⚠️ _worker.js is missing or empty. Skipping version comment insertion."
