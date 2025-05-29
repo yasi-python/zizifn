@@ -1,45 +1,64 @@
-# zizifn
-Zizifn Edge tunnel is a proxy tool based on Cloudflare workers and Pages, supporting multiple protocols and configuration options.
+# Custom vless-ws-tls Proxy on Cloudflare
 
-## Cloudflare pages
+This project allows you to deploy a high-speed, custom `vless-ws-tls` proxy using Cloudflare Workers and Cloudflare Pages. It features a professional user interface to display proxy configuration and network information.
 
-### Environment Variables
-variables required for Constructing pages.dev 
+## Deployment
 
-| variables | Examples | Values |
-| -------- | ----------- | ---------------------------- |  
-| UUID | `206b7ab3-2b7b-4784-9839-c617c7f73ce4` | To generate your own UUID refer to<br> [![UUID](https://img.shields.io/badge/ID_generator-gray?logo=lucid)](https://www.uuidgenerator.net) |
-| PROXYIP | `nima.nscl.ir` <br>`turk.radicalization.ir` | To find proxyIP<br> [![ProxyIP](https://img.shields.io/badge/Check_here-gray?logo=envoyproxy)](https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md) |
+You can deploy this project on either Cloudflare Workers or Cloudflare Pages.
 
+## Environment Variables
 
-## Cloudflare workers
+The following environment variables can be configured in your Cloudflare Worker/Pages settings:
 
-If you intend to create a worker, you can proceed similarly to the page and utilize the same variables;
+*   **`UUID`** (Recommended)
+    *   Your unique user ID.
+    *   It is highly recommended to set this to your own UUID.
+    *   You can generate one from a UUID generator website (e.g., [uuidgenerator.net](https://www.uuidgenerator.net)).
+*   **`PROXYIP`** (Optional)
+    *   The IP address of the proxy server.
+    *   Default: `turk.radicalization.ir`
+    *   Alternative: `nima.nacl.ir`
+*   **`DNS_RESOLVER`** (Optional)
+    *   The DNS resolver address.
+    *   Default: `1.1.1.1`
+    *   Alternative: `8.8.8.8` (It's generally best to keep the default).
 
-however, it is also possible to modify them directly within the code.  
-To do this, you need to replace your "UUID" [^1] value in line `23` of "src/worker-vless.js file" [^2] ,
-and the ProxyIP can be adjusted from line `26`.  
+## User Interface (UI)
 
-You can find some "proxyIPs" [^3] from this great repository, and there is even a guide on how to find new proxies included in the repo.
+This project includes a professional UI built with HTML, CSS, and JavaScript, served via GitHub Pages from the `index.html` file in this repository.
 
+**Modifying the UI:**
 
-## View Configuration
+If you fork this project and want to modify the UI:
 
-- Visit your domain: `https://your-domain.pages.dev`
-- Use specific UUID: `domain/uuid`
-- Get subscription content: visit `domain/uuid`
-- For Example: `https://zizifn-env.pages.dev/9ff8589993d34-4560-a1f0-5dc5b127fb00`
+1.  **Enable GitHub Pages:**
+    *   Go to your forked repository's **Settings**.
+    *   Navigate to the **Pages** section under "Code and automation".
+    *   In the "Build and deployment" section, under "Source", select **GitHub Actions**. (If you prefer to deploy from a branch, you can select your `main` branch and `/ (root)` folder, then save).
+2.  **Update UI Host URL:**
+    *   Open the `index.js` file.
+    *   On line 22, update the `HTML_URL` constant to your GitHub Pages URL (e.g., `https://your-username.github.io/your-repo-name/`).
+3.  **Apply Changes:**
+    *   Any changes you commit and push to your `index.html` file (and related CSS/JS) will now be reflected on your live GitHub Pages site.
 
----
+## API Services
 
-### Credits
+The UI utilizes API services to detect and display your IP address and the proxy server's IP information:
 
-Many thanks to our awesome Chinese buddy, **zizifn!** [^4]  
+*   **Client IP Information:** Uses a combination of `api.ipify.org` (to get the public IP) and Scamalytics (via a Cloudflare Worker endpoint defined in `index.js`) to display your IP, location, ISP, and a risk score.
+*   **Proxy IP Information:** Uses `ip-api.io` to display the proxy server's IP, location, and ISP.
 
-[^1]: [UUID Generator](https://www.uuidgenerator.net/)
+These services are generally sufficient for personal use.
 
-[^2]: [src/worker-vless.js](src/worker-vless.js)
+**Important for Public Forks:**
 
-[^3]: [List of ProxyIP](https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md)
+If you intend to make your fork public or anticipate high traffic, it is strongly recommended to:
 
-[^4]:https://github.com/zizifn/edgetunnel
+1.  **Use Your Own Scamalytics API Key:**
+    *   Obtain a free or paid API key from [Scamalytics](https://scamalytics.com/).
+    *   In your Cloudflare Worker, set the `SCAMALYTICS_USERNAME` and `SCAMALYTICS_API_KEY` environment variables. Alternatively, you can update the default values directly in `index.js` (lines 25 and 26), but environment variables are recommended for security.
+2.  The other services (`api.ipify.org`, `ip-api.io`) are public, but be mindful of their rate limits if you expect very high usage.
+
+## Original Project
+
+This project is based on the work of zizifn and has been updated with a new UI and enhanced functionality.
