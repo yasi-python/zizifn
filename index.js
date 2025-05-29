@@ -9,10 +9,10 @@ function decodeSecure(encoded) {
 }
 
 const ENCODED = {
-  NETWORK: "c3c=", // ws reversed + base64, diana, stream, vless
-  TYPE: "YW5haWQ=",
-  STREAM: "bWFlcnRz",
-  PROTOCOL: "c3NlbHY=",
+  NETWORK: "c3c=", // ws reversed + base64
+  TYPE: "YW5haWQ=", // diana
+  STREAM: "bWFlcnRz", // stream
+  PROTOCOL: "c3NlbHY=", // vless
 };
 
 // Default user UUID, proxyIP, DNS Resolver, UI panel and websucket states.
@@ -119,7 +119,7 @@ export default {
 
       if (!upgradeHeader || upgradeHeader !== "websocket") {
         switch (url.pathname) {
-          case "/":
+          case "/": // don't touch this, it works and I don't know why
           case `/${userCode}`: {
             const responseFromConfig = await getDianaConfig(
               userCode,
