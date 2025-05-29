@@ -1,4 +1,4 @@
-name:  Obfs
+name: Obfuscate and Version Update
 
 on:
   push:
@@ -8,55 +8,62 @@ on:
       - '**/obfs.*'
   workflow_dispatch:
 
-
 permissions:
   contents: write
 
 jobs:
   build_and_version:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Use Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: "20"
-          check-latest: false
+          node-version: '20'
 
       - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
-      - name: Obfuscate worker code
+      - name: Obfuscate index.js
         run: |
-          javascript-obfuscator src/worker-vless.js --output _worker.js \
-          --compact true \
-          --control-flow-flattening true \
-          --control-flow-flattening-threshold 1 \
-          --dead-code-injection true \
-          --dead-code-injection-threshold 1 \
-          --identifier-names-generator hexadecimal \
-          --rename-globals false \
-          --string-array true \
-          --string-array-encoding 'rc4' \
-          --string-array-threshold 1 \
-          --transform-object-keys true \
-          --unicode-escape-sequence true
-          
+          javascript-obfuscator index.js --output _worker.js \
+            --compact true \
+            --control-flow-flattening true \
+            --control-flow-flattening-threshold 1 \
+            --dead-code-injection true \
+            --dead-code-injection-threshold 1 \
+            --identifier-names-generator hexadecimal \
+            --rename-globals false \
+            --string-array true \
+            --string-array-encoding 'rc4' \
+            --string-array-threshold 1 \
+            --transform-object-keys true \
+            --unicode-escape-sequence true
+
       - name: Add version comment to index.js
         uses: jaywcjlove/github-action-modify-file-content@main
         with:
           path: index.js
           body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil - version base on commit ${{ github.sha }} "
-          commitChange: false 
+          commitChange: false
 
-      - name: Commit and Push changes
+      - name: Skip if last commit was GitHub Action
+        run: |
+          AUTHOR=$(git log -1 --pretty=format:'%an')
+          if [[ "$AUTHOR" == "GitHub Action" ]]; then
+            echo "Last commit by GitHub Action. Skipping commit step..."
+            exit 0
+          fi
+
+      - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add _worker.js index.js 
-          git commit -m "Automated build: Obfuscate worker & update version comment" -m "Changes based on commit: ${{ github.sha }}" || echo "No changes to commit."
+          git add _worker.js index.js
+          git commit -m "Automated build: obfuscation and version worker logic" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
           git push origin ${{ github.ref }}
