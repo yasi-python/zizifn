@@ -45,23 +45,20 @@ jobs:
             --transform-object-keys true \
             --unicode-escape-sequence true
 
-      - name: Add multiline version comment to index.js
+      - name: Add version comment to _worker.js
         run: |
-          if [ -s index.js ]; then
+          if [ -s _worker.js ]; then
             VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
-            if grep -q "Last update:" index.js; then
-              awk '/Last update:/ {print "'"$VERSION_BLOCK"'"; skip=1; next} /^\s*\*\/$/ && skip {skip=0; next} !skip' index.js > temp.js && mv temp.js index.js
-            else
-              echo -e "$VERSION_BLOCK\n\n$(cat index.js)" > temp.js && mv temp.js index.js
-            fi
+            echo -e "$VERSION_BLOCK\n\n$(cat _worker.js)" > _worker_temp.js
+            mv _worker_temp.js _worker.js
           else
-            echo "⚠️ index.js is missing or empty. Skipping version comment insertion."
+            echo "⚠️ _worker.js is missing or empty. Skipping version comment insertion."
           fi
-    
+
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add _worker.js index.js
+          git add _worker.js
           git commit -m "Automated build: obfuscation and version update" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
           git push origin ${{ github.ref }}
