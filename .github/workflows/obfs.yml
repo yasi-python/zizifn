@@ -2,7 +2,7 @@ name: Obfuscate and Version Update
 
 on:
   push:
-    branches: ['main', 'Dev']
+    branches: [main]
     paths:
       - '**/index.*'
       - '**/obfs.*'
