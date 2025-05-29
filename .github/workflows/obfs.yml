@@ -56,7 +56,8 @@ jobs:
             fi
           else
             echo "⚠️ index.js is missing or empty. Skipping version comment insertion."
-
+          fi
+    
       - name: Commit and push changes
         run: |
           git config --local user.email "action@github.com"
