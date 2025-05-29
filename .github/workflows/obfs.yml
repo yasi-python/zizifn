@@ -1,21 +1,23 @@
-name: Obfs
+name:  Obfs
 
 on:
   push:
-    branches: ['main', 'DEV']
+    branches: ['main', 'Dev']
     paths:
       - '**/index.*'
       - '**/obfs.*'
   workflow_dispatch:
 
-jobs:
-  obfuscate:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
+permissions:
+  contents: write
+
+jobs:
+  build_and_version:
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -25,23 +27,12 @@ jobs:
           node-version: "20"
           check-latest: false
 
-      - name: Install dependencies
+      - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
-      - name: Create, update, or delete _worker.js based on index.js
+      - name: Obfuscate worker code
         run: |
-          if [ ! -f index.js ]; then
-            echo "index.js not found."
-            if git ls-files --error-unmatch _worker.js > /dev/null 2>&1; then
-              echo "Removing tracked file _worker.js as index.js is not present."
-              rm -f _worker.js
-            else
-              echo "_worker.js is not tracked or does not exist. Nothing to remove."
-            fi
-          else
-          echo "Obfuscating index.js to _worker.js..."
-          javascript-obfuscator index.js --output _worker.js \
-          --self-defending false \
+          javascript-obfuscator src/worker-vless.js --output _worker.js \
           --compact true \
           --control-flow-flattening true \
           --control-flow-flattening-threshold 1 \
@@ -54,20 +45,18 @@ jobs:
           --string-array-threshold 1 \
           --transform-object-keys true \
           --unicode-escape-sequence true
-            
-            if [ $? -ne 0 ]; then
-              echo "JavaScript obfuscation failed!"
-              exit 1
-            fi
-          fi
+          
+      - name: Add version comment to index.js
+        uses: jaywcjlove/github-action-modify-file-content@main
+        with:
+          path: index.js
+          body: "Last update: {{date:YYYY-MM-DD HH:mm:ss}} UTC - We are all REvil - version base on commit ${{ github.sha }} "
+          commitChange: false 
 
-      - name: Commit and push _worker.js
+      - name: Commit and Push changes
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add _worker.js
-          git commit -m "Secured and refined _worker.js logic from commit ${{ github.sha }}" || echo "No changes to commit"
-
-      - name: Push changes
-        run: |
+          git add _worker.js index.js 
+          git commit -m "Automated build: Obfuscate worker & update version comment" -m "Changes based on commit: ${{ github.sha }}" || echo "No changes to commit."
           git push origin ${{ github.ref }}
