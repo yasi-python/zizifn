@@ -47,12 +47,15 @@ jobs:
 
       - name: Add multiline version comment to index.js
         run: |
-          VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
-          if grep -q "Last update:" index.js; then
-            sed -i '/Last update:/,/^\s*\*\//c\'"$VERSION_BLOCK" index.js
+          if [ -s index.js ]; then
+            VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
+            if grep -q "Last update:" index.js; then
+              awk '/Last update:/ {print "'"$VERSION_BLOCK"'"; skip=1; next} /^\s*\*\/$/ && skip {skip=0; next} !skip' index.js > temp.js && mv temp.js index.js
+            else
+              echo -e "$VERSION_BLOCK\n\n$(cat index.js)" > temp.js && mv temp.js index.js
+            fi
           else
-            echo -e "$VERSION_BLOCK\n\n$(cat index.js)" > index.js
-          fi
+            echo "⚠️ index.js is missing or empty. Skipping version comment insertion."
 
       - name: Commit and push changes
         run: |
