@@ -16,10 +16,10 @@ const ENCODED = {
 };
 
 // Default user UUID, proxyIP, DNS Resolver, UI panel and websucket states.
-let userCode = "10e894da-61b1-4998-ac2b-e9ccb6af9d30";
+let userCode = "dd0cfef0-fda9-47ec-8a65-49d7bc004f82";
 let proxyIP = "turk.radicalization.ir";
 let dnsResolver = "1.1.1.1";
-const HTML_URL = "https://sahar-km.github.io/zx/";
+const HTML_URL = "https://nirevil.github.io/zizifn/";
 const WS_READY_STATE_OPEN = 1;
 const WS_READY_STATE_CLOSING = 2;
 
