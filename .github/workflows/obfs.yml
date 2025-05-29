@@ -45,19 +45,13 @@ jobs:
             --transform-object-keys true \
             --unicode-escape-sequence true
 
-      - name: Add version comment to index.js
+      - name: Add multiline version comment to index.js
         run: |
-          VERSION_COMMENT="// Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC - We are all REvil - version based on commit ${{ github.sha }}"
-          grep -q "Last update:" index.js && \
-            sed -i "s|^// Last update:.*|$VERSION_COMMENT|" index.js || \
-            echo -e "$VERSION_COMMENT\n$(cat index.js)" > index.js
-
-      - name: Skip if last commit was GitHub Action
-        run: |
-          AUTHOR=$(git log -1 --pretty=format:'%an')
-          if [[ "$AUTHOR" == "GitHub Action" ]]; then
-            echo "Last commit by GitHub Action. Skipping commit step..."
-            exit 0
+          VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
+          if grep -q "Last update:" index.js; then
+            sed -i '/Last update:/,/^\s*\*\//c\'"$VERSION_BLOCK" index.js
+          else
+            echo -e "$VERSION_BLOCK\n\n$(cat index.js)" > index.js
           fi
 
       - name: Commit and push changes
