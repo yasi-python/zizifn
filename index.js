@@ -39,7 +39,7 @@ let DOH_ENDPOINT = "https://1.1.1.1/dns-query";
 
 // Obfuscation helper placeholders (can be used to hide sensitive keywords in-source)
 const TK_B64 = {
-  vless: "dmxlc3M=",
+  vless: "dmxlc3M=", // vless
   ws: "d3M=",
   type: "dHlwZQ==",
   protocol: "cHJvdG9jb2w=",
@@ -261,17 +261,14 @@ export default {
  */
 function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
 	// Generate he configs
-	const dreamConfig = `vless://${userID}@${hostName}:443?encryption=none&security=tls&sni=${hostName}&fp=chrome&type=ws&host=${hostName}&path=%2Findex.html%3Fed%3D2048#${hostName}-Dream`;
-	const freedomConfig = `vless://${userID}@${hostName}:443?encryption=none&security=tls&sni=${hostName}&fp=firefox&type=ws&host=${hostName}&path=/index.html&eh=Sec-WebSocket-Protocol&ed=2560#${hostName}-Freedom`;
-	
-	// SUBSCRIPTION URL (for client buttons that should open the subscription)
-	const subUrl = `https://${hostName}/sub/${userID}`;  // raw subscription URL
-	const subUrlEncoded = encodeURIComponent(subUrl);  // encoded for use inside custom schemes
-	
-	// The special URLs for clients are generated
-	const clashMetaFullUrl = `clash://install-config?url=https://revil-sub.pages.dev/sub/clash-meta?url=${subUrlEncoded}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`;
-  
-  let html = `
+	const dreamConfig = `vless://${userID}@${hostName}:443?encryption=none&security=tls&sni=${hostName}&fp=chrome&type=ws&host=${hostName}&path=%2Fassets%2FapiDiana%3Fed%3D2560#${hostName}-XRAY`;
+	const freedomConfig = `vless://${userID}@${hostName}:443?encryption=none&security=tls&sni=${hostName}&fp=firefox&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#&eh=Sec-WebSocket-Protocol&ed=2560#${hostName}-SINGBOX`;
+
+    // The special URLs for clients are generated
+    const clashMetaFullUrl = `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${encodeURIComponent(freedomConfig)}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`;
+    const nekoBoxImportUrl = `https://sahar-km.github.io/arcane/${btoa(freedomConfig)}`;
+
+	let html = `
 	<!doctype html>
 	<html lang="en">
 	<head>
@@ -895,11 +892,11 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
 	        <pre id="xray-config">{{DREAM_CONFIG}}</pre>
 	      </div>
 	      <div class="client-buttons">
-	        <a href="hiddify://install-config?url={{SUB_URL_ENCODED}}" class="button client-btn">
+	        <a href="hiddify://install-config?url={{FREEDOM_CONFIG_ENCODED}}" class="button client-btn">
 	          <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg></span>
 	          <span class="button-text">Import to Hiddify</span>
 	        </a>
-	        <a href="v2rayng://install-config?url={{SUB_URL_ENCODED}}" class="button client-btn">
+	        <a href="v2rayng://install-config?url={{DREAM_CONFIG_ENCODED}}" class="button client-btn">
 	          <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
 	          <span class="button-text">Import to V2rayNG</span>
 	        </a>
@@ -925,7 +922,7 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
 	          <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
 	          <span class="button-text">Import to Clash Meta</span>
 	        </a>
-	        <a href="sn://subscription?url={{SUB_URL_ENCODED}}" class="button client-btn">
+	        <a href="{{NEKOBOX_URL}}" class="button client-btn">
 	          <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
 	          <span class="button-text">Import to NekoBox</span>
 	        </a>
@@ -1239,44 +1236,25 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
 	        if(proxyHostEl) proxyHostEl.textContent = proxyHostVal;
 	    
 	        if (proxyHostVal !== "N/A") {
-            // Strip port (handles host:port and [ipv6]:port)
-            const stripPort = (hostStr) => {
-              if (!hostStr) return hostStr;
-              // IPv6 in brackets: [::1]:443 -> ::1
-              const m = hostStr.match(/^\[(.+)\](?::\d+)?$/);
-              if (m) return m[1];
-              // Otherwise remove trailing :port if present (hostname:port or ip:port)
-              const parts = hostStr.split(':');
-              // If there is more than one part and it looks like hostname:port, remove last part
-              if (parts.length > 1 && /^[0-9]+$/.test(parts[parts.length - 1])) {
-                parts.pop();
-                return parts.join(':');
-              }
-              return hostStr;
-            };
-          
-            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) { 
-              try {
-                const lookupName = stripPort(proxyDomainOrIp);
-                // Use DNS resolver with host-only (no port)
-                const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(lookupName)}&type=A\`);
-                if (dnsRes.ok) {
-                  const dnsData = await dnsRes.json();
-                  if (dnsData.Answer && dnsData.Answer.length > 0) {
-                    const ipAnswer = dnsData.Answer.find(a => a.type === 1);
-                    if (ipAnswer) resolvedProxyIp = ipAnswer.data;
-                    else console.warn('No A record for proxy domain:', lookupName);
-                  } else console.warn('DNS lookup no answers for proxy domain:', lookupName);
-                } else {
-                  console.error(\`DNS lookup failed for \${lookupName}: \${dnsRes.status}\`);
-                  resolvedProxyIp = proxyDomainOrIp;
-                }
-              } catch (e) {
-                console.error('DNS resolution for proxy failed:', e);
-                resolvedProxyIp = proxyDomainOrIp;
-              }
-            }
-	          
+	          if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) { 
+	            try {
+	              const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
+	              if (dnsRes.ok) {
+	                  const dnsData = await dnsRes.json();
+	                  if (dnsData.Answer && dnsData.Answer.length > 0) {
+	                    const ipAnswer = dnsData.Answer.find(a => a.type === 1); 
+	                    if (ipAnswer) resolvedProxyIp = ipAnswer.data;
+	                    else console.warn('No A record for proxy domain:', proxyDomainOrIp);
+	                  } else console.warn('DNS lookup no answers for proxy domain:', proxyDomainOrIp);
+	              } else {
+	                console.error(\`DNS lookup failed for \${proxyDomainOrIp}: \${dnsRes.status}\`);
+	                resolvedProxyIp = proxyDomainOrIp;
+	              }
+	            } catch (e) { 
+	              console.error('DNS resolution for proxy failed:', e); 
+	              resolvedProxyIp = proxyDomainOrIp;
+	            }
+	          }
 	          const proxyGeoData = await fetchIpApiIoInfo(resolvedProxyIp); 
 	          if (proxyGeoData && (proxyGeoData.ip || proxyGeoData.country_code)) { 
 	            updateIpApiIoDisplay(proxyGeoData, 'proxy', proxyHostVal); 
@@ -1373,8 +1351,7 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
       .replace(/{{DREAM_CONFIG_ENCODED}}/g, encodeURIComponent(dreamConfig))
 	  .replace(/{{FREEDOM_CONFIG_ENCODED}}/g, encodeURIComponent(freedomConfig))
       .replace(/{{CLASH_META_URL}}/g, clashMetaFullUrl)
-      .replace(/{{SUB_URL}}/g, subUrl)
-      .replace(/{{SUB_URL_ENCODED}}/g, subUrlEncoded)
+      .replace(/{{NEKOBOX_URL}}/g, nekoBoxImportUrl)
       .replace(/{{YEAR}}/g, new Date().getFullYear().toString());
 	
 	return html;
@@ -1849,30 +1826,18 @@ function socks5AddressParser(address) {
 	}
 }
 
-const ni = 'QA==';
-const nm = 'dmxlc3M=';
-const na = 'ZGlhbmE=';
+const at = 'QA==';
+const pt = 'dmxlc3M=';
+const ed = 'RUR0dW5uZWw=';
 
 function GenSub(userID_path, hostname, proxyIP) {
 	const mainDomains = new Set([
 		hostname,
 		'creativecommons.org',
+		'speed.cloudflare.com',
+		'www.speedtedt.net',
 		'sky.rethinkdns.com',
-		'www.speedtest.net',
-		'cfip.1323123.xyz',
-		'cfip.xxxxxxxx.tk',
-		'cf.090227.xyz',
-		'singapore.com',
 		'go.inmobi.com',
-		'cf.877771.xyz',
-		'www.wto.org',
-		'cdn.tzpro.xyz',
-		'japan.com',
-		'icook.hk',
-		'fbi.gov',
-		'time.is',
-		'zula.ir',
-		'ip.sb',
 		...proxyIPs,
 	]);
 	const HttpPort = new Set([80, 8080, 8880, 2052, 2082, 2086, 2095]);
@@ -1888,7 +1853,7 @@ function GenSub(userID_path, hostname, proxyIP) {
 			mainDomains.forEach(domain => {
 				Array.from(HttpPort).forEach((port) => {
 					const urlPart = `${hostname.split('.')[0]}-${domain}-HTTP-${port}`;
-					const mainProtocolHttp = atob(nm) + '://' + userID + atob(ni) + domain + ':' + port + commonUrlPartHttp + urlPart;
+					const mainProtocolHttp = atob(pt) + '://' + userID + atob(at) + domain + ':' + port + commonUrlPartHttp + urlPart;
 					allUrls.push(mainProtocolHttp);
 				});
 			});
@@ -1896,14 +1861,14 @@ function GenSub(userID_path, hostname, proxyIP) {
 		mainDomains.forEach(domain => {
 			Array.from(HttpsPort).forEach((port) => {
 				const urlPart = `${hostname.split('.')[0]}-${domain}-HTTPS-${port}`;
-				const mainProtocolHttps = atob(nm) + '://' + userID + atob(ni) + domain + ':' + port + commonUrlPartHttps + urlPart;
+				const mainProtocolHttps = atob(pt) + '://' + userID + atob(at) + domain + ':' + port + commonUrlPartHttps + urlPart;
 				allUrls.push(mainProtocolHttps);
 			});
 		});
 		proxyIPArray.forEach((proxyAddr) => {
 			const [proxyHost, proxyPort = '443'] = proxyAddr.split(':');
 			const urlPart = `${hostname.split('.')[0]}-${proxyHost}-HTTPS-${proxyPort}`;
-			const secondaryProtocolHttps = atob(nm) + '://' + userID + atob(ni) + proxyHost + ':' + proxyPort + commonUrlPartHttps + urlPart + '-' + atob(na);
+			const secondaryProtocolHttps = atob(pt) + '://' + userID + atob(at) + proxyHost + ':' + proxyPort + commonUrlPartHttps + urlPart + '-' + atob(ed);
 			allUrls.push(secondaryProtocolHttps);
 		});
 		return allUrls;
