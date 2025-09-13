@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nochec
 // @ts-ignor
 import { connect } from 'cloudflare:sockets';
 
@@ -1224,24 +1224,27 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
         console.warn(\`\${prefix} data loading failed: \${message}\`);
       }
 
-      /**
-       * Loads all network information.
-       */
+      // --- Loads all network information. ---
       async function loadNetworkInfo() {
         try {
           // --- Load Proxy Server Info (ip-api.io) ---
-          const proxyDomainOrIp = document.body.getAttribute('data-proxy-ip');
+          const proxyIpWithPort = document.body.getAttribute('data-proxy-ip'); // [FIX] Get the full value (e.g., 'nima.nscl.ir:443')
+          const proxyDomainOrIp = proxyIpWithPort ? proxyIpWithPort.split(':')[0] : null; // Extract only the hostname/IP part for lookups
+
           let resolvedProxyIp = proxyDomainOrIp;
-          const proxyHostVal = (proxyDomainOrIp && proxyDomainOrIp !== "N/A" && proxyDomainOrIp.toLowerCase() !== "null" && proxyDomainOrIp.trim() !== "")
-                                 ? proxyDomainOrIp
+          // Use the original value with port for display, but the clean value for logic checks
+          const proxyHostVal = (proxyIpWithPort && proxyIpWithPort !== "N/A" && proxyIpWithPort.toLowerCase() !== "null" && proxyIpWithPort.trim() !== "")
+                                 ? proxyIpWithPort
                                  : "N/A";
 
           const proxyHostEl = document.getElementById('proxy-host');
           if(proxyHostEl) proxyHostEl.textContent = proxyHostVal;
 
-          if (proxyHostVal !== "N/A") {
+          if (proxyDomainOrIp && proxyDomainOrIp !== "N/A") {
+            // Check if it's a domain (not an IP) to perform DNS lookup
             if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) {
               try {
+                // Use the clean domain for DNS resolution
                 const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
 
                 if (dnsRes.ok) {
@@ -1253,13 +1256,14 @@ function getBeautifulConfig(userID, hostName, proxyIPWithPort) {
                     } else console.warn('DNS lookup no answers for proxy domain:', proxyDomainOrIp);
                 } else {
                   console.error(\`DNS lookup failed for \${proxyDomainOrIp}: \${dnsRes.status}\`);
-                  resolvedProxyIp = proxyDomainOrIp;
+                  // Keep resolvedProxyIp as the domain if DNS fails
                 }
               } catch (e) {
                 console.error('DNS resolution for proxy failed:', e);
-                resolvedProxyIp = proxyDomainOrIp;
+                // Keep resolvedProxyIp as the domain on error
               }
             }
+            // Use the potentially resolved IP for the GeoIP lookup
             const proxyGeoData = await fetchIpApiIoInfo(resolvedProxyIp);
             if (proxyGeoData && (proxyGeoData.ip || proxyGeoData.country_code)) {
               updateIpApiIoDisplay(proxyGeoData, 'proxy', proxyHostVal);
