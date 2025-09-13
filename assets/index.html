@@ -6,9 +6,7 @@
   <title>VLESS Proxy Configuration</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link 
-    href="https://fonts.googleapis.com/css2?family=Ibarra+Real+Nova:ital,wght@0,400..700;1,400..700&family=Fira+Code:wght@300..700&family=Inter:opsz,wght@14..32,100..900&family=Roboto+Mono:wght@100..700&display=swap"
-    rel="stylesheet">
+  <link  href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
   <style>
     * {
       margin: 0;
@@ -62,8 +60,8 @@
       --status-info: #4f90c4;
 
       --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
-      --sans-serif: "Styrene B LC", "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Noto Color Emoji", sans-serif;
-      --mono-serif: "Fira Code", "Roboto Mono", Cantarell, Courier Prime, SFMono-Regular, monospace;
+      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, "Noto Color Emoji", sans-serif;
+      --mono-serif: "Fira Code", "Courier Prime", SFMono-Regular, monospace;
     }
 
     body {
@@ -80,7 +78,7 @@
     }
 
     .container {
-      max-width: 768;
+      max-width: 768px;
       margin: 20px auto;
       padding: 0 12px;
       border-radius: var(--border-radius);
@@ -898,7 +896,7 @@
         locationElement.innerHTML = locationText || "N/A";
       }
       if (ispElement) {
-        ispElement.textContent = geo.isp || geo.org || geo.as_name || geo.as || 'N/A';
+        ispElement.textContent = geo.isp || geo.organisation || geo.as_name || geo.as || 'N/A';
       }
     }
     
