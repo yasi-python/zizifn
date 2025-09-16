@@ -1,6 +1,6 @@
 /*
- * Last update: 2025-09-14 14:32:24 UTC
- * We are all REvil - version based on commit e0110c2910f019dfe3ddf1abf032134eb379c96c
+ * Last update: 2025-09-16 00:30:26 UTC
+ * We are all REvil - version based on commit 3b725aa27a7f0eb8076d7dd1c4c59f57ea10b6c7
  */
 
 import { connect } from 'cloudflare:sockets';
@@ -43,7 +43,7 @@ const Config = {
         'WS_READY_STATE_OPEN': 0x1,
         'WS_READY_STATE_CLOSING': 0x2
     };
-function generateRandomPath(a = 0xa) {
+function generateRandomPath(a = 0xc) {
     const b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let c = '';
     for (let d = 0x0; d < a; d++) {
@@ -52,7 +52,7 @@ function generateRandomPath(a = 0xa) {
     return '/' + c + '?' + CONSTANTS['URL_ED_PARAM'];
 }
 function generateConfigName(a, b, c, d = '') {
-    const e = a['split']('.')[0x0]['substring'](0x0, 0x6), f = b === 'https' ? 'TLS' : 'TCP', g = d ? '-' + d : '';
+    const e = a['split']('.')[0x0]['substring'](0x0, 0x8), f = b === 'https' ? 'TLS' : 'TCP', g = d ? '-' + d : '';
     return e + '-' + f + '-' + c + g;
 }
 function createVlessLink({
@@ -82,9 +82,9 @@ function createVlessLink({
 export default {
     async 'fetch'(a, b, c) {
         try {
-            const d = Config['fromEnv'](b), e = new URL(a['url']), f = [d['userID']], g = a['headers']['get']('Upgrade');
-            if (g && g['toLowerCase']() === 'websocket') {
-                const i = {
+            const d = Config['fromEnv'](b), e = new URL(a['url']), f = a['headers']['get']('Upgrade');
+            if (f && f['toLowerCase']() === 'websocket') {
+                const h = {
                     'userID': d['userID'],
                     'proxyIP': d['proxyIP'],
                     'proxyPort': d['proxyPort'],
@@ -93,22 +93,20 @@ export default {
                     'enableSocks': d['socks5']['enabled'],
                     'parsedSocks5Address': d['socks5']['enabled'] ? socks5AddressParser(d['socks5']['address']) : {}
                 };
-                return ProtocolOverWSHandler(a, i);
+                return ProtocolOverWSHandler(a, h);
             }
-            const h = f['find'](j => e['pathname']['includes']('/' + j));
             if (e['pathname'] === '/scamalytics-lookup')
                 return handleScamalyticsLookup(a, d);
-            if (!h)
+            const g = e['pathname']['includes']('/' + d['userID']);
+            if (!g)
                 return new Response('404\x20—\x20UUID\x20Not\x20Found.\x20Peace\x20&\x20Love', { 'status': 0x194 });
-            if (e['pathname']['startsWith']('/sub/' + h))
-                return handleSubscription(d['userID'], e['hostname']);
-            if (e['pathname']['startsWith']('/ipsub/' + h))
-                return handleIpSubscription(h, e['hostname']);
-            if (e['pathname']['startsWith']('/' + h))
-                return handleConfigRequestPage(h, e['hostname'], d['proxyAddress']);
+            if (e['pathname']['startsWith']('/ipsub/' + d['userID']))
+                return handleIpSubscription(d['userID'], e['hostname']);
+            if (e['pathname']['startsWith']('/' + d['userID']))
+                return handleConfigRequestPage(d['userID'], e['hostname'], d['proxyAddress']);
             return new Response('Not\x20Found', { 'status': 0x194 });
-        } catch (j) {
-            return console['error'](j), new Response(j['toString'](), { 'status': 0x1f4 });
+        } catch (i) {
+            return console['error'](i), new Response('Internal\x20Server\x20Error', { 'status': 0x1f4 });
         }
     }
 };
@@ -119,20 +117,26 @@ function handleConfigRequestPage(a, b, c) {
         'headers': { 'Content-Type': 'text/html;\x20charset=utf-8' }
     });
 }
-function handleSubscription(a, b) {
+async function handleIpSubscription(a, b) {
     const c = [
             b,
             'creativecommons.org',
             'www.speedtest.net',
             'sky.rethinkdns.com',
+            'cfip.1323123.xyz',
+            'cfip.xxxxxxxx.tk',
             'go.inmobi.com',
-            'zula.ir',
-            'ip.sb',
             'cf.877771.xyz',
             'cf.090227.xyz',
-            'cfip.1323123.xyz',
-            'cfip.xxxxxxxx.tk'
+            'zula.ir'
         ], d = [
+            0x1bb,
+            0x20fb,
+            0x805,
+            0x823,
+            0x827,
+            0x830
+        ], e = [
             0x50,
             0x1f90,
             0x22b0,
@@ -140,105 +144,76 @@ function handleSubscription(a, b) {
             0x822,
             0x826,
             0x82f
-        ], e = [
-            0x1bb,
-            0x20fb,
-            0x805,
-            0x823,
-            0x827,
-            0x830
-        ], f = a['split'](',')['map'](h => h['trim']()), g = f['flatMap'](h => {
-            const i = [];
-            let j = 0x1;
-            return c['forEach'](k => {
-                const l = d[Math['floor'](Math['random']() * d['length'])];
-                i['push'](createVlessLink({
-                    'userID': h,
-                    'address': k,
-                    'port': l,
-                    'host': b,
-                    'path': generateRandomPath(),
-                    'security': 'none',
-                    'fp': 'chrome',
-                    'name': generateConfigName(k, 'http', l, j++)
-                }));
+        ];
+    let f = [];
+    c['forEach']((g, h) => {
+        const i = e[Math['floor'](Math['random']() * e['length'])];
+        f['push'](createVlessLink({
+            'userID': a,
+            'address': g,
+            'port': i,
+            'host': b,
+            'path': generateRandomPath(),
+            'security': 'none',
+            'fp': 'chrome',
+            'name': generateConfigName(g, 'http', i, 'D' + (h + 0x1))
+        }));
+        const j = d[Math['floor'](Math['random']() * d['length'])];
+        f['push'](createVlessLink({
+            'userID': a,
+            'address': g,
+            'port': j,
+            'host': b,
+            'path': generateRandomPath(),
+            'security': 'tls',
+            'sni': b,
+            'fp': 'firefox',
+            'name': generateConfigName(g, 'https', j, 'D' + (h + 0x1))
+        }));
+    });
+    try {
+        const g = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
+        if (g['ok']) {
+            const h = await g['json'](), i = [
+                    ...h['ipv4'] || [],
+                    ...h['ipv6'] || []
+                ]['map'](k => k['ip']), j = i['slice'](0x0, 0x14);
+            j['forEach']((k, l) => {
                 const m = e[Math['floor'](Math['random']() * e['length'])];
-                i['push'](createVlessLink({
-                    'userID': h,
+                f['push'](createVlessLink({
+                    'userID': a,
                     'address': k,
                     'port': m,
                     'host': b,
                     'path': generateRandomPath(),
-                    'security': 'tls',
-                    'sni': b,
-                    'fp': 'firefox',
-                    'name': generateConfigName(k, 'https', m, j++)
+                    'security': 'none',
+                    'fp': 'chrome',
+                    'name': generateConfigName(k, 'http', m, 'IP' + (l + 0x1))
                 }));
-            }), i;
-        });
-    return new Response(btoa(g['join']('\x0a')), {
-        'status': 0xc8,
-        'headers': { 'Content-Type': 'text/plain;charset=utf-8' }
-    });
-}
-async function handleIpSubscription(a, b) {
-    try {
-        const c = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
-        if (!c['ok'])
-            throw new Error('Failed\x20to\x20fetch\x20IPs:\x20' + c['status']);
-        const d = await c['json'](), e = [
-                ...d['ipv4'] || [],
-                ...d['ipv6'] || []
-            ]['map'](j => j['ip']);
-        if (e['length'] === 0x0)
-            return new Response('No\x20IPs\x20found.', { 'status': 0x194 });
-        const f = e['slice'](0x0, 0x12), g = [
-                0x1bb,
-                0x20fb,
-                0x805,
-                0x823,
-                0x827,
-                0x830
-            ], h = [
-                0x50,
-                0x1f90,
-                0x22b0,
-                0x804,
-                0x822,
-                0x826,
-                0x82f
-            ], i = f['flatMap']((j, k) => {
-                const l = k + 0x1, m = [], n = h[Math['floor'](Math['random']() * h['length'])];
-                m['push'](createVlessLink({
+                const n = d[Math['floor'](Math['random']() * d['length'])];
+                f['push'](createVlessLink({
                     'userID': a,
-                    'address': j,
+                    'address': k,
                     'port': n,
                     'host': b,
                     'path': generateRandomPath(),
-                    'security': 'none',
-                    'fp': 'chrome',
-                    'name': generateConfigName(j, 'http', n, l)
-                }));
-                const o = g[Math['floor'](Math['random']() * g['length'])];
-                return m['push'](createVlessLink({
-                    'userID': a,
-                    'address': j,
-                    'port': o,
-                    'host': b,
-                    'path': generateRandomPath(),
                     'security': 'tls',
                     'sni': b,
                     'fp': 'firefox',
-                    'name': generateConfigName(j, 'https', o, l)
-                })), m;
+                    'name': generateConfigName(k, 'https', n, 'IP' + (l + 0x1))
+                }));
             });
-        return new Response(btoa(i['join']('\x0a')), {
-            'status': 0xc8,
-            'headers': { 'Content-Type': 'text/plain;charset=utf-8' }
-        });
-    } catch (j) {
-        return console['error']('Failed\x20to\x20generate\x20IP\x20subscription:\x20' + j['message']), new Response('Failed\x20to\x20generate\x20IP\x20subscription:\x20' + j['message'], { 'status': 0x1f4 });
+        } else
+            console['warn']('Failed\x20to\x20fetch\x20IPs,\x20using\x20domain\x20configs\x20only.\x20Status:\x20' + g['status']);
+    } catch (k) {
+        console['error']('Error\x20fetching\x20IPs,\x20using\x20domain\x20configs\x20only:\x20' + k['message']);
     }
+    if (f['length'] === 0x0)
+        return new Response('Failed\x20to\x20generate\x20any\x20subscription\x20configurations.', { 'status': 0x1f4 });
+    return new Response(btoa(f['join']('\x0a')), {
+        'status': 0xc8,
+        'headers': { 'Content-Type': 'text/plain;charset=utf-8' }
+    });
 }
 async function handleScamalyticsLookup(a, b) {
     const c = new URL(a['url']), d = c['searchParams']['get']('ip');
@@ -306,10 +281,6 @@ function generateBeautifulConfigPage(a, b, c) {
     let h = '\x0a\x20\x20<!doctype\x20html>\x0a\x20\x20<html\x20lang=\x22en\x22>\x0a\x20\x20<head>\x0a\x20\x20\x20\x20<meta\x20charset=\x22UTF-8\x22\x20/>\x0a\x20\x20\x20\x20<meta\x20name=\x22viewport\x22\x20content=\x22width=device-width,\x20initial-scale=1.0\x22\x20/>\x0a\x20\x20\x20\x20<title>VLESS\x20Proxy\x20Configuration</title>\x0a\x20\x20\x20\x20<link\x20rel=\x22icon\x22\x20href=\x22https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Dev/assets/favicon.svg\x22\x20type=\x22image/svg+xml\x22>\x0a\x20\x20\x20\x20<link\x20rel=\x22preconnect\x22\x20href=\x22https://fonts.googleapis.com\x22>\x0a\x20\x20\x20\x20<link\x20rel=\x22preconnect\x22\x20href=\x22https://fonts.gstatic.com\x22\x20crossorigin>\x0a\x20\x20\x20\x20<link\x20href=\x22https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap\x22\x20rel=\x22stylesheet\x22>\x0a\x20\x20\x20\x20<style>' + getPageCSS() + '</style>\x0a\x20\x20</head>\x0a\x20\x20<body\x20data-proxy-ip=\x22' + c + '\x22>\x0a\x20\x20\x20\x20' + getPageHTML(f, g) + '\x0a\x20\x20\x20\x20<script>' + getPageScript() + '</script>\x0a\x20\x20</body>\x0a\x20\x20</html>';
     return h;
 }
-function isValidUUID(a) {
-    const b = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return b['test'](a);
-}
 async function ProtocolOverWSHandler(a, b) {
     const c = new WebSocketPair(), [d, e] = Object['values'](c);
     e['accept']();
@@ -369,6 +340,10 @@ async function ProtocolOverWSHandler(a, b) {
         'status': 0x65,
         'webSocket': d
     });
+}
+function isValidUUID(a) {
+    const b = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return b['test'](a);
 }
 async function HandleTCPOutBound(a, b, c, d, e, f, g, h, i) {
     !i && (i = {
