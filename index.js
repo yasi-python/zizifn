@@ -1,22 +1,14 @@
-// @ts-nocheck
-
 import { connect } from 'cloudflare:sockets';
 
 // --- Configuration ---
 const Config = {
-  // User ID. Generate UUID at: https://www.uuidgenerator.net/
   userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
-
-  // Format: ['hostname:port', 'ip:port']
-  // proxy-IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
   proxyIPs: ['nima.nscl.ir:443'],
-
   scamalytics: {
     username: 'dianaclk01',
     apiKey: 'c57eb62bbde89f00742cb3f92d7127f96132c9cea460f18c08fd5e62530c5604',
     baseUrl: 'https://api11.scamalytics.com/v3/',
   },
-
   socks5: {
     enabled: false,
     relayMode: false,
@@ -24,9 +16,7 @@ const Config = {
   },
 
   /**
-   * Returns the final config object for the current request.
-   * @param {object} env - Environment variables from fetch input.
-   * @returns {object} Final configuration for request.
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
    */
   fromEnv(env) {
     const selectedProxyIP =
@@ -65,7 +55,7 @@ const CONSTANTS = {
  * @param {number} length - Length of path.
  * @returns {string}
  */
-function generateRandomPath(length = 10) {
+function generateRandomPath(length = 12) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
@@ -83,7 +73,7 @@ function generateRandomPath(length = 10) {
  * @returns {string}
  */
 function generateConfigName(domain, protocol, port, index = '') {
-  const domainShort = domain.split('.')[0].substring(0, 6);
+  const domainShort = domain.split('.')[0].substring(0, 8);
   const protocolShort = protocol === 'https' ? 'TLS' : 'TCP';
   const suffix = index ? `-${index}` : '';
   return `${domainShort}-${protocolShort}-${port}${suffix}`;
@@ -112,12 +102,14 @@ function createVlessLink({ userID, address, port, host, path, security, sni, fp,
 export default {
   /**
    * Main fetch handler for Worker.
+   * @param {Request<any, CfProperties<any>>} request
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
+   * @param {any} ctx
    */
   async fetch(request, env, ctx) {
     try {
       const config = Config.fromEnv(env);
       const url = new URL(request.url);
-      const userIDs = [config.userID];
 
       const upgradeHeader = request.headers.get('Upgrade');
       if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
@@ -135,30 +127,27 @@ export default {
         return ProtocolOverWSHandler(request, requestConfig);
       }
 
-      const matchingUserID = userIDs.find(id => url.pathname.includes(`/${id}`));
 
       if (url.pathname === '/scamalytics-lookup') {
         return handleScamalyticsLookup(request, config);
       }
 
-      if (!matchingUserID) {
+      const isUserMatch = url.pathname.includes(`/${config.userID}`);
+      if (!isUserMatch) {
         return new Response('404 — UUID Not Found. Peace & Love', { status: 404 });
       }
 
-      if (url.pathname.startsWith(`/sub/${matchingUserID}`)) {
-        return handleSubscription(config.userID, url.hostname);
+      if (url.pathname.startsWith(`/ipsub/${config.userID}`)) {
+        return handleIpSubscription(config.userID, url.hostname);
       }
-      if (url.pathname.startsWith(`/ipsub/${matchingUserID}`)) {
-        return handleIpSubscription(matchingUserID, url.hostname);
-      }
-      if (url.pathname.startsWith(`/${matchingUserID}`)) {
-        return handleConfigRequestPage(matchingUserID, url.hostname, config.proxyAddress);
+      if (url.pathname.startsWith(`/${config.userID}`)) {
+        return handleConfigRequestPage(config.userID, url.hostname, config.proxyAddress);
       }
 
       return new Response('Not Found', { status: 404 });
     } catch (err) {
       console.error(err);
-      return new Response(err.toString(), { status: 500 });
+      return new Response('Internal Server Error', { status: 500 });
     }
   },
 };
@@ -179,140 +168,118 @@ function handleConfigRequestPage(userID, hostName, proxyAddress) {
 }
 
 /**
- * Generates domain-based subscription links.
- * @param {string} userID_path - Comma-separated user UUIDs.
- * @param {string} hostname
- * @returns {Response}
- */
-function handleSubscription(userID_path, hostname) {
-  const mainDomains = [
-    hostname,
-    'creativecommons.org',
-    'www.speedtest.net',
-    'sky.rethinkdns.com',
-    'go.inmobi.com',
-    'zula.ir',
-    'ip.sb',
-    'cf.877771.xyz',
-    'cf.090227.xyz',
-    'cfip.1323123.xyz',
-    'cfip.xxxxxxxx.tk',
-  ];
-
-  const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-  const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
-  const userIDs = userID_path.split(',').map(id => id.trim());
-
-  const configs = userIDs.flatMap(userID => {
-    const allConfigs = [];
-    let configIndex = 1;
-
-    mainDomains.forEach(domain => {
-      const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
-      allConfigs.push(
-        createVlessLink({
-          userID,
-          address: domain,
-          port: httpPort,
-          host: hostname,
-          path: generateRandomPath(),
-          security: 'none',
-          fp: 'chrome',
-          name: generateConfigName(domain, 'http', httpPort, configIndex++),
-        }),
-      );
-
-      const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
-      allConfigs.push(
-        createVlessLink({
-          userID,
-          address: domain,
-          port: httpsPort,
-          host: hostname,
-          path: generateRandomPath(),
-          security: 'tls',
-          sni: hostname,
-          fp: 'firefox',
-          name: generateConfigName(domain, 'https', httpsPort, configIndex++),
-        }),
-      );
-    });
-
-    return allConfigs;
-  });
-
-  return new Response(btoa(configs.join('\n')), {
-    status: 200,
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-  });
-}
-
-/**
- * Generates IP-based subscription links using Cloudflare IPs.
+ * Generates subscription links using both static domains and dynamic IPs.
  * @param {string} matchingUserID
  * @param {string} hostName
  * @returns {Promise<Response>}
  */
 async function handleIpSubscription(matchingUserID, hostName) {
+  // Static domains as a reliable fallback
+  const mainDomains = [
+    hostName,
+    'creativecommons.org',
+    'www.speedtest.net',
+    'sky.rethinkdns.com',
+    'cfip.1323123.xyz',
+    'cfip.xxxxxxxx.tk',
+    'go.inmobi.com',
+    'cf.877771.xyz',
+    'cf.090227.xyz',
+    'zula.ir',
+  ];
+
+  const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
+  const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
+  let allConfigs = [];
+
+  // Generate configs for static domains first
+  mainDomains.forEach((domain, index) => {
+    const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
+    allConfigs.push(
+      createVlessLink({
+        userID: matchingUserID,
+        address: domain,
+        port: httpPort,
+        host: hostName,
+        path: generateRandomPath(),
+        security: 'none',
+        fp: 'chrome',
+        name: generateConfigName(domain, 'http', httpPort, `D${index + 1}`),
+      }),
+    );
+    const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
+    allConfigs.push(
+      createVlessLink({
+        userID: matchingUserID,
+        address: domain,
+        port: httpsPort,
+        host: hostName,
+        path: generateRandomPath(),
+        security: 'tls',
+        sni: hostName,
+        fp: 'firefox',
+        name: generateConfigName(domain, 'https', httpsPort, `D${index + 1}`),
+      }),
+    );
+  });
+
+  // Try to fetch dynamic Cloudflare Clean IPs
   try {
     const response = await fetch(
       'https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json',
     );
-    if (!response.ok) throw new Error(`Failed to fetch IPs: ${response.status}`);
+    if (response.ok) {
+      const data = await response.json();
+      const ips = [...(data.ipv4 || []), ...(data.ipv6 || [])].map(item => item.ip);
+      const selectedIps = ips.slice(0, 20);
 
-    const data = await response.json();
-    const ips = [...(data.ipv4 || []), ...(data.ipv6 || [])].map(item => item.ip);
-    if (ips.length === 0) return new Response('No IPs found.', { status: 404 });
-
-    const selectedIps = ips.slice(0, 18);
-    const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
-    const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-
-    const configs = selectedIps.flatMap((ip, index) => {
-      const configIndex = index + 1;
-      const configs = [];
-
-      const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
-      configs.push(
-        createVlessLink({
-          userID: matchingUserID,
-          address: ip,
-          port: httpPort,
-          host: hostName,
-          path: generateRandomPath(),
-          security: 'none',
-          fp: 'chrome',
-          name: generateConfigName(ip, 'http', httpPort, configIndex),
-        }),
-      );
-
-      const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
-      configs.push(
-        createVlessLink({
-          userID: matchingUserID,
-          address: ip,
-          port: httpsPort,
-          host: hostName,
-          path: generateRandomPath(),
-          security: 'tls',
-          sni: hostName,
-          fp: 'firefox',
-          name: generateConfigName(ip, 'https', httpsPort, configIndex),
-        }),
-      );
-
-      return configs;
-    });
-
-    return new Response(btoa(configs.join('\n')), {
-      status: 200,
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    });
+      selectedIps.forEach((ip, index) => {
+        const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
+        allConfigs.push(
+          createVlessLink({
+            userID: matchingUserID,
+            address: ip,
+            port: httpPort,
+            host: hostName,
+            path: generateRandomPath(),
+            security: 'none',
+            fp: 'chrome',
+            name: generateConfigName(ip, 'http', httpPort, `IP${index + 1}`),
+          }),
+        );
+        const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
+        allConfigs.push(
+          createVlessLink({
+            userID: matchingUserID,
+            address: ip,
+            port: httpsPort,
+            host: hostName,
+            path: generateRandomPath(),
+            security: 'tls',
+            sni: hostName,
+            fp: 'firefox',
+            name: generateConfigName(ip, 'https', httpsPort, `IP${index + 1}`),
+          }),
+        );
+      });
+    } else {
+      console.warn(`Failed to fetch IPs, using domain configs only. Status: ${response.status}`);
+    }
   } catch (error) {
-    console.error(`Failed to generate IP subscription: ${error.message}`);
-    return new Response(`Failed to generate IP subscription: ${error.message}`, { status: 500 });
+    console.error(`Error fetching IPs, using domain configs only: ${error.message}`);
   }
+
+  // Return all generated configs
+  if (allConfigs.length === 0) {
+    return new Response('Failed to generate any subscription configurations.', { status: 500 });
+  }
+
+  return new Response(btoa(allConfigs.join('\n')), {
+    status: 200,
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  });
 }
+
 
 /**
  * Performs Scamalytics IP lookup using API.
@@ -401,6 +368,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     exclave: `sn://subscription?url=${subUrlEncoded}`,
   };
 
+  // --- HTML Page Content ---
   let finalHTML = `
   <!doctype html>
   <html lang="en">
@@ -423,19 +391,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   return finalHTML;
 }
 
-// --- Utility & Helper Functions ---
-
-/**
- * Validates UUID format.
- * @param {string} uuid
- * @returns {boolean}
- */
-function isValidUUID(uuid) {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-}
-
-// --- Core VLESS Protocol Logic ---
+// --- CORE VLESS PROTOCOL LOGIC ---
 
 /**
  * Handles VLESS protocol over WebSocket.
@@ -443,6 +399,7 @@ function isValidUUID(uuid) {
  * @param {object} config
  * @returns {Promise<Response>}
  */
+
 async function ProtocolOverWSHandler(request, config) {
   const webSocketPair = new WebSocketPair();
   const [client, webSocket] = Object.values(webSocketPair);
@@ -450,7 +407,7 @@ async function ProtocolOverWSHandler(request, config) {
   let address = '';
   let portWithRandomLog = '';
   let udpStreamWriter = null;
-  const log = (info, event) => {
+  const log = (/** @type {string} */ info, /** @type {undefined} */ event) => {
     console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
   };
   const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
@@ -533,7 +490,24 @@ async function ProtocolOverWSHandler(request, config) {
 }
 
 /**
+ * @param {string} uuid
+ */
+function isValidUUID(uuid) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+/**
  * Handles TCP outbound logic for VLESS.
+ * @param {{ value: any; }} remoteSocket
+ * @param {number} addressType
+ * @param {string} addressRemote
+ * @param {number} portRemote
+ * @param {any} rawClientData
+ * @param {WebSocket} webSocket
+ * @param {Uint8Array} protocolResponseHeader
+ * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
+ * @param {{ socks5Relay: any; parsedSocks5Address: any; enableSocks: any; proxyIP: any; proxyPort: any; userID?: string; socks5Address?: string; }} config
  */
 async function HandleTCPOutBound(
   remoteSocket,
@@ -558,6 +532,10 @@ async function HandleTCPOutBound(
     };
   }
 
+  /**
+   * @param {any} address
+   * @param {any} port
+   */
   async function connectAndWrite(address, port, socks = false) {
     let tcpSocket;
     if (config.socks5Relay) {
@@ -579,10 +557,10 @@ async function HandleTCPOutBound(
     const tcpSocket = config.enableSocks
       ? await connectAndWrite(addressRemote, portRemote, true)
       : await connectAndWrite(
-          config.proxyIP || addressRemote,
-          config.proxyPort || portRemote,
-          false,
-        );
+        config.proxyIP || addressRemote,
+        config.proxyPort || portRemote,
+        false,
+      );
 
     tcpSocket.closed
       .catch(error => {
@@ -600,16 +578,19 @@ async function HandleTCPOutBound(
 
 /**
  * Converts WebSocket messages to a readable stream.
+ * @param {WebSocket} webSocketServer
+ * @param {string} earlyDataHeader
+ * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
  */
 function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   return new ReadableStream({
     start(controller) {
-      webSocketServer.addEventListener('message', event => controller.enqueue(event.data));
+      webSocketServer.addEventListener('message', (/** @type {{ data: any; }} */ event) => controller.enqueue(event.data));
       webSocketServer.addEventListener('close', () => {
         safeCloseWebSocket(webSocketServer);
         controller.close();
       });
-      webSocketServer.addEventListener('error', err => {
+      webSocketServer.addEventListener('error', (/** @type {any} */ err) => {
         log('webSocketServer has error');
         controller.error(err);
       });
@@ -617,7 +598,7 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
       if (error) controller.error(error);
       else if (earlyData) controller.enqueue(earlyData);
     },
-    pull(_controller) {},
+    pull(_controller) { },
     cancel(reason) {
       log(`ReadableStream was canceled, due to ${reason}`);
       safeCloseWebSocket(webSocketServer);
@@ -625,8 +606,11 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   });
 }
 
+
 /**
  * Parses and validates VLESS protocol header.
+ * @param {ArrayBufferLike & { BYTES_PER_ELEMENT?: never; }} protocolBuffer
+ * @param {string} userID
  */
 function ProcessProtocolHeader(protocolBuffer, userID) {
   if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
@@ -634,8 +618,8 @@ function ProcessProtocolHeader(protocolBuffer, userID) {
   const dataView = new DataView(protocolBuffer);
   const version = dataView.getUint8(0);
   const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
-  const uuids = userID.split(',').map(id => id.trim());
-  const isValidUser = uuids.some(uuid => slicedBufferString === uuid);
+  const uuids = userID.split(',').map((/** @type {string} */ id) => id.trim());
+  const isValidUser = uuids.some((/** @type {string} */ uuid) => slicedBufferString === uuid);
 
   if (!isValidUser) return { hasError: true, message: 'invalid user' };
 
@@ -691,6 +675,11 @@ function ProcessProtocolHeader(protocolBuffer, userID) {
 
 /**
  * Pipes remote socket data to WebSocket.
+ * @param {Socket} remoteSocket
+ * @param {WebSocket} webSocket
+ * @param {string | Uint8Array | ArrayBuffer | ArrayBufferView | Blob} protocolResponseHeader
+ * @param {{ (): Promise<void>; (): any; }} retry
+ * @param {{ (info: any, event: any): void; (arg0: string): void; (info: any, event: any): void; (arg0: string): void; (arg0: string): void; }} log
  */
 async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
   let hasIncomingData = false;
@@ -727,6 +716,7 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
 
 /**
  * Decodes base64 string to ArrayBuffer.
+ * @param {string} base64Str
  */
 function base64ToArrayBuffer(base64Str) {
   if (!base64Str) return { earlyData: null, error: null };
@@ -745,6 +735,7 @@ function base64ToArrayBuffer(base64Str) {
 
 /**
  * Safely closes a WebSocket connection.
+ * @param {{ readyState: number; close: () => void; }} socket
  */
 function safeCloseWebSocket(socket) {
   try {
@@ -760,6 +751,10 @@ function safeCloseWebSocket(socket) {
 }
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
+
+/**
+ * @param {Uint8Array | (string | number)[]} arr
+ */
 function unsafeStringify(arr, offset = 0) {
   return (
     byteToHex[arr[offset]] +
@@ -784,6 +779,10 @@ function unsafeStringify(arr, offset = 0) {
     byteToHex[arr[offset + 15]]
   ).toLowerCase();
 }
+
+/**
+ * @param {Uint8Array} arr
+ */
 function stringify(arr, offset = 0) {
   const uuid = unsafeStringify(arr, offset);
   if (!isValidUUID(uuid)) throw new TypeError('Stringified UUID is invalid');
@@ -802,7 +801,7 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
   const transformStream = new TransformStream({
     transform(chunk, controller) {
       // Parse UDP packets from VLESS framing
-      for (let index = 0; index < chunk.byteLength; ) {
+      for (let index = 0; index < chunk.byteLength;) {
         const lengthBuffer = chunk.slice(index, index + 2);
         const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
         const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPacketLength));
@@ -854,12 +853,17 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
 
   const writer = transformStream.writable.getWriter();
   return {
-    write: chunk => writer.write(chunk),
+    write: (/** @type {any} */ chunk) => writer.write(chunk),
   };
 }
 
 /**
  * SOCKS5 TCP connection logic.
+ * @param {any} addressType
+ * @param {string} addressRemote
+ * @param {number} portRemote
+ * @param {any} log
+ * @param {{ username: any; password: any; hostname: any; port: any; }} parsedSocks5Addr
  */
 async function socks5Connect(addressType, addressRemote, portRemote, log, parsedSocks5Addr) {
   const { username, password, hostname, port } = parsedSocks5Addr;
@@ -900,7 +904,7 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
         4,
         ...addressRemote
           .split(':')
-          .flatMap(x => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)]),
+          .flatMap((/** @type {string} */ x) => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)]),
       ]);
       break;
     default:
@@ -1245,11 +1249,12 @@ function getPageHTML(configs, clientUrls) {
   `;
 }
 
-// --- @returns {string} Client-side JavaScript. ---
-
+/**
+ * @returns {string} Client-side JavaScript
+ * This function is self-contained and doesn't need template literals from the server.
+ * Using a template literal here is just for multi-line string formatting.
+ */
 function getPageScript() {
-  // This function is self-contained and doesn't need template literals from the server.
-  // Using a template literal here is just for multi-line string formatting.
   return `
       function copyToClipboard(button, text) {
         const originalHTML = button.innerHTML;
