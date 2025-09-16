@@ -49,16 +49,16 @@ jobs:
             --string-array-calls-transform false \
             --string-array-encoding none \
             --string-array-index-shift true \
-            --string-array-rotate true \
-            --string-array-shuffle true \
+            --string-array-rotate false \
+            --string-array-shuffle false \
             --string-array-wrappers-count 1 \
             --string-array-wrappers-chained-calls false \
-            --string-array-wrappers-parameters-max-count 2 \
+            --string-array-wrappers-parameters-max-count 1 \
             --string-array-wrappers-type variable \
-            --string-array-threshold 0.5 \
+            --string-array-threshold 0.2 \
             --unicode-escape-sequence false
 
-      - name: Add multiline version comment to _worker.js
+      - name: Add mulìtiline version comment to _worker.js
         run: |
           if [ -s _worker.js ]; then
             VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil —— version based on commit ${{ github.sha }}\n */"
