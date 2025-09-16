@@ -29,23 +29,19 @@ jobs:
       - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
-      - name: Web-safe obfuscation of index.js (Low-Medium level)
+      - name: Gentle obfuscation of index.js
         run: |
           javascript-obfuscator index.js --output _worker.js \
             --compact true \
             --control-flow-flattening false \
             --dead-code-injection false \
-            --debug-protection false \
-            --debug-protection-interval 0 \
+            --identifier-names-generator mangled \
+            --rename-globals false \
+            --string-array false \
+            --transform-object-keys false \
+            --unicode-escape-sequence false \
             --disable-console-output false \
-            --identifier-names-generator hexadecimal \
-            --log false \
-            --numbers-to-expressions false \
-            --rename-globals true \
-            --self-defending false \
-            --simplify true \
-            --split-strings false \
-            --unicode-escape-sequence false
+            --self-defending false
 
       - name: Add mulìtiline version comment to _worker.js
         run: |
