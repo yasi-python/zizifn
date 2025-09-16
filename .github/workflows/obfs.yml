@@ -32,31 +32,31 @@ jobs:
       - name: Web-safe obfuscation of index.js (Low-Medium level)
         run: |
           javascript-obfuscator index.js --output _worker.js \
-            --compact true \
-            --control-flow-flattening false \
-            --dead-code-injection false \
-            --debug-protection false \
-            --debug-protection-interval 0 \
-            --disable-console-output false \
-            --identifier-names-generator hexadecimal \
-            --log false \
-            --numbers-to-expressions false \
-            --rename-globals false \
-            --self-defending false \
-            --simplify true \
-            --split-strings false \
-            --string-array true \
-            --string-array-calls-transform false \
-            --string-array-encoding [] \
-            --string-array-index-shift true \
-            --string-array-rotate true \
-            --string-array-shuffle true \
-            --string-array-wrappers-count 1 \
-            --string-array-wrappers-chained-calls false \
-            --string-array-wrappers-parameters-max-count 2 \
-            --string-array-wrappers-type variable \
-            --string-array-threshold 0.5 \
-            --unicode-escape-sequence false
+            --compact: true,
+            --controlFlowFlattening: false,
+            --deadCodeInjection: false,
+            --debugProtection: false,
+            --debugProtectionInterval: 0,
+            --disableConsoleOutput: true,
+            --identifierNamesGenerator: 'hexadecimal',
+            --log: false,
+            --numbersToExpressions: false,
+            --renameGlobals: false,
+            --selfDefending: true,
+            --simplify: true,
+            --splitStrings: false,
+            --stringArray: true,
+            --stringArrayCallsTransform: false,
+            --stringArrayEncoding: [],
+            --stringArrayIndexShift: true,
+            --stringArrayRotate: true,
+            --stringArrayShuffle: true,
+            --stringArrayWrappersCount: 1,
+            --stringArrayWrappersChainedCalls: true,
+            --stringArrayWrappersParametersMaxCount: 2,
+            --stringArrayWrappersType: 'variable',
+            --stringArrayThreshold: 0.75,
+            --unicodeEscapeSequence: false
 
       - name: Add multiline version comment to _worker.js
         run: |
