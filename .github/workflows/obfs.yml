@@ -29,24 +29,30 @@ jobs:
       - name: Install javascript-obfuscator
         run: npm install -g javascript-obfuscator
 
-      - name: Gentle obfuscation of index.js
+      - name: Web-safe obfuscation of index.js
         run: |
           javascript-obfuscator index.js --output _worker.js \
-            --compact false \
+            --compact true \
             --control-flow-flattening false \
             --dead-code-injection false \
-            --identifier-names-generator mangled \
+            --identifier-names-generator hexadecimal \
             --rename-globals false \
-            --string-array false \
+            --string-array true \
+            --string-array-threshold 0.3 \
+            --string-array-encoding 'none' \
+            --string-array-wrap-calls-count 1 \
+            --string-array-calls-transform false \
             --transform-object-keys false \
             --unicode-escape-sequence false \
             --disable-console-output false \
-            --self-defending false
+            --self-defending false \
+            --domain-lock false \
+            --reserved-names "['fetch','Response','URL','btoa','atob','addEventListener','document','window']"
 
       - name: Add multiline version comment to _worker.js
         run: |
           if [ -s _worker.js ]; then
-            VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil - version based on commit ${{ github.sha }}\n */"
+            VERSION_BLOCK="/*\n * Last update: $(date -u '+%Y-%m-%d %H:%M:%S') UTC\n * We are all REvil —— version based on commit ${{ github.sha }}\n */"
             {
               printf '%b\n\n' "$VERSION_BLOCK"
               cat _worker.js
@@ -58,8 +64,8 @@ jobs:
 
       - name: Commit and push changes
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
+          git config --local user.name "NET Sentinel Bot"
+          git config --local user.email "224584266+NetSentinel-Bot@users.noreply.github.com"
           git add _worker.js
-          git commit -m "Automated build: gentle obfuscation and version update" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
+          git commit -m "npm run build: medium obfuscation and version update" -m "Based on commit ${{ github.sha }}" || echo "No changes to commit."
           git push origin ${{ github.ref }}
