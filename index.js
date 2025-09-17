@@ -3,13 +3,20 @@
 import { connect } from 'cloudflare:sockets';
 
 // --- Configuration ---
+
+/**
+ * To generate your own UUID: https://www.uuidgenerator.net
+ * proxy IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+ * You don't need to change the acamalytics values for personal use, but if many forks are going to be created from you, it's better to request a personal API. 
+ * It will be sent to you via email within 24 hours. Website: https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
+ */
 const Config = {
   userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
   proxyIPs: ['nima.nscl.ir:443'],
   scamalytics: {
-    username: 'dianaclk01',
-    apiKey: 'c57eb62bbde89f00742cb3f92d7127f96132c9cea460f18c08fd5e62530c5604',
-    baseUrl: 'https://api11.scamalytics.com/v3/',
+    username: 'revilseptember',
+    apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
+    baseUrl: 'https://api12.scamalytics.com/v3/',
   },
   socks5: {
     enabled: false,
@@ -378,7 +385,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VLESS Proxy Configuration</title>
-    <link rel="icon" href="https://raw.githubusercontent.com/sahar-km/zx/refs/heads/main/assets/R2.png" type="image/png">
+    <link rel="icon" href="https://raw.githubusercontent.com/sahar-km/zx/refs/heads/main/assets/revil-logo-transparent.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
@@ -394,7 +401,6 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
 }
 
 // --- CORE VLESS PROTOCOL LOGIC ---
-
 /**
  * Handles VLESS protocol over WebSocket.
  * @param {Request} request
