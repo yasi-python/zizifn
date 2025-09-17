@@ -1,10 +1,9 @@
+// @ts-ignore
 import { connect } from 'cloudflare:sockets';
-
-// --- Configuration ---
 
 /**
  * To generate your own UUID: https://www.uuidgenerator.net
- * proxy IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+ * Proxy IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
  * You don't need to change the acamalytics values for personal use, but if many forks are going to be created from you, it's better to request a personal API. 
  * It will be sent to you via email within 24 hours. Website: https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
  */
@@ -23,7 +22,7 @@ const Config = {
   },
 
   /**
-   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
    */
   fromEnv(env) {
     const selectedProxyIP =
@@ -38,7 +37,7 @@ const Config = {
       scamalytics: {
         username: env.SCAMALYTICS_USERNAME || this.scamalytics.username,
         apiKey: env.SCAMALYTICS_API_KEY || this.scamalytics.apiKey,
-        baseUrl: this.scamalytics.baseUrl,
+        baseUrl: env.SCAMALYTICS_BASEURL || this.scamalytics.baseUrl,
       },
       socks5: {
         enabled: !!env.SOCKS5,
@@ -105,12 +104,10 @@ function createVlessLink({ userID, address, port, host, path, security, sni, fp,
   return `vless://${userID}@${address}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
 }
 
-// --- Main Router ---
 export default {
   /**
-   * Main fetch handler for Worker.
    * @param {Request<any, CfProperties<any>>} request
-   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
    * @param {any} ctx
    */
   async fetch(request, env, ctx) {
@@ -190,8 +187,10 @@ async function handleIpSubscription(matchingUserID, hostName) {
     'cfip.1323123.xyz',
     'cfip.xxxxxxxx.tk',
     'go.inmobi.com',
-    'cf.877771.xyz',
+    'singapore.com',
+    'www.visa.com',
     'cf.090227.xyz',
+    'cdnjs.com',
     'zula.ir',
   ];
 
@@ -199,7 +198,6 @@ async function handleIpSubscription(matchingUserID, hostName) {
   const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
   let allConfigs = [];
 
-  // Generate configs for static domains first
   mainDomains.forEach((domain, index) => {
     const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
     allConfigs.push(
@@ -230,7 +228,6 @@ async function handleIpSubscription(matchingUserID, hostName) {
     );
   });
 
-  // Try to fetch dynamic Cloudflare Clean IPs
   try {
     const response = await fetch(
       'https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json',
@@ -276,7 +273,6 @@ async function handleIpSubscription(matchingUserID, hostName) {
     console.error(`Error fetching IPs, using domain configs only: ${error.message}`);
   }
 
-  // Return all generated configs
   if (allConfigs.length === 0) {
     return new Response('Failed to generate any subscription configurations.', { status: 500 });
   }
@@ -346,13 +342,13 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
       userID,
       address: hostName,
       port: 443,
-      path: '/assets?ed=2560',
+      path: '/ed=2048',
       security: 'tls',
       sni: hostName,
       host: hostName,
       fp: 'chrome',
       alpn: 'http/1.1',
-      name: 'Xray',
+      name: `${hostName}-Xray`,
     }),
     freedom: createVlessLink({
       userID,
@@ -375,7 +371,6 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     exclave: `sn://subscription?url=${subUrlEncoded}`,
   };
 
-  // --- HTML Page Content ---
   let finalHTML = `
   <!doctype html>
   <html lang="en">
@@ -398,14 +393,13 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   return finalHTML;
 }
 
-// --- CORE VLESS PROTOCOL LOGIC ---
 /**
+ * Core vless protocol logic
  * Handles VLESS protocol over WebSocket.
  * @param {Request} request
  * @param {object} config
  * @returns {Promise<Response>}
  */
-
 async function ProtocolOverWSHandler(request, config) {
   const webSocketPair = new WebSocketPair();
   const [client, webSocket] = Object.values(webSocketPair);
@@ -538,7 +532,7 @@ async function HandleTCPOutBound(
     };
   }
 
-  /**
+  /*
    * @param {any} address
    * @param {any} port
    */
@@ -721,7 +715,7 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
 }
 
 /**
- * Decodes base64 string to ArrayBuffer.
+ * decodes base64 string to ArrayBuffer.
  * @param {string} base64Str
  */
 function base64ToArrayBuffer(base64Str) {
@@ -758,7 +752,7 @@ function safeCloseWebSocket(socket) {
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
 
-/**
+/*
  * @param {Uint8Array | (string | number)[]} arr
  */
 function unsafeStringify(arr, offset = 0) {
@@ -786,7 +780,7 @@ function unsafeStringify(arr, offset = 0) {
   ).toLowerCase();
 }
 
-/**
+/*
  * @param {Uint8Array} arr
  */
 function stringify(arr, offset = 0) {
@@ -796,7 +790,7 @@ function stringify(arr, offset = 0) {
 }
 
 /**
- * DNS pipeline for UDP DNS requests, using DNS-over-HTTPS.
+ * DNS pipeline for UDP DNS requests, using DNS-over-HTTPS, (REvil Method).
  * @param {WebSocket} webSocket
  * @param {Uint8Array} vlessResponseHeader
  * @param {Function} log
@@ -1248,7 +1242,7 @@ function getPageHTML(configs, clientUrls) {
       </div>
 
       <div class="footer">
-        <p>© <span id="current-year">${new Date().getFullYear()}</span> REvil - All Rights Reserved</p>
+        <p>© <span id="current-year">${new Date().getFullYear()}</span>REvil - All Rights Reserved</p>
         <p>Secure. Private. Fast.</p>
       </div>
     </div>
