@@ -1,7 +1,7 @@
 // @ts-ignore
 import { connect } from 'cloudflare:sockets';
 
-/**
+/*
  * To generate your own UUID: https://www.uuidgenerator.net
  * Proxy IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
  * You don't need to change the acamalytics values for personal use, but if many forks are going to be created from you, it's better to request a personal API. 
@@ -90,7 +90,9 @@ function generateConfigName(domain, protocol, port, index = '') {
  * @param {object} options
  * @returns {string}
  */
-function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, name }) {
+function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, name,
+  extra = {}
+}) {
   const params = new URLSearchParams();
   params.set('type', 'ws');
   params.set('host', host);
@@ -100,6 +102,8 @@ function createVlessLink({ userID, address, port, host, path, security, sni, fp,
   if (sni) params.set('sni', sni);
   if (fp) params.set('fp', fp);
   if (alpn) params.set('alpn', alpn);
+  
+  for (const [k, v] of Object.entries(extra)) params.set(k, v);
 
   return `vless://${userID}@${address}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
 }
@@ -130,7 +134,6 @@ export default {
         };
         return ProtocolOverWSHandler(request, requestConfig);
       }
-
 
       if (url.pathname === '/scamalytics-lookup') {
         return handleScamalyticsLookup(request, config);
@@ -229,6 +232,7 @@ async function handleIpSubscription(matchingUserID, hostName) {
   });
 
   try {
+	// Try to fetch dynamic Cloudflare Clean IPs
     const response = await fetch(
       'https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json',
     );
@@ -342,7 +346,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
       userID,
       address: hostName,
       port: 443,
-      path: '/ed=2048',
+      path: '/assets?ed=2048',
       security: 'tls',
       sni: hostName,
       host: hostName,
@@ -354,12 +358,16 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
       userID,
       address: hostName,
       port: 443,
-      path: '/assets&ed=2560&eh=Sec-WebSocket-Protocol',
+      path: '/assets',
       security: 'tls',
       sni: hostName,
       host: hostName,
       fp: 'firefox',
       alpn: 'h3',
+      extra: {
+        ed: 2560,
+        eh: 'Sec-WebSocket-Protocol',
+      },
       name: `${hostName}-Singbox`,
     }),
   };
