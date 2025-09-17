@@ -1,64 +1,156 @@
-# Custom vless-ws-tls Proxy on Cloudflare
+# Serverless Runtime
 
-This project allows you to deploy a high-speed, custom `vless-ws-tls` proxy using Cloudflare Workers and Cloudflare Pages. It features a professional user interface to display proxy configuration and network information.
+## Custom VLESS-WS-TLS Proxy on Cloudflare
 
-## Deployment
+> Base on [ZiZifn] EdgeTunnel
 
-You can deploy this project on either Cloudflare Workers or Cloudflare Pages.
+<br/>
 
-## Environment Variables
+ 
+این پروژه به شما اجازه می‌دهد تا بدون نیاز به سرور شخصی، تنها با استفاده از Cloudflare Workers و Pages، یک پروکسی امن و پایدار برای خود یا دوستانتان داشته باشید. تمام پردازش‌ها در شبکه کلادفلر انجام می‌شود و شما از سرعت و امنیت این زیرساخت بهره‌مند خواهید شد.
+همچنین این پروژه دارای یک رابط کاربری حرفه‌ای برای نمایش پیکربندی پروکسی و اطلاعات شبکه است.
 
-The following environment variables can be configured in your Cloudflare Worker/Pages settings:
+<br/> 
 
-*   **`UUID`** (Recommended)
-    *   Your unique user ID.
-    *   It is highly recommended to set this to your own UUID.
-    *   You can generate one from a UUID generator website (e.g., [uuidgenerator.net](https://www.uuidgenerator.net)).
-*   **`PROXYIP`** (Optional)
-    *   The IP address of the proxy server.
-    *   Default: `turk.radicalization.ir`
-    *   Alternative: `nima.nacl.ir`
-*   **`DNS_RESOLVER`** (Optional)
-    *   The DNS resolver address.
-    *   Default: `1.1.1.1`
-    *   Alternative: `8.8.8.8` (It's generally best to keep the default).
+ ## برخی از ویژگی‌ها
+ 
+> 🧩 **راه‌اندازی سریع و آسان:** در کمتر از ۵ دقیقه و با چند کلیک، پروکسی شما آماده است.
+>
+> ⚙️ **کد سمت‌سرور قدرتمند:** کد‌ بک‌اند این پروژه بدون نیاز به مبهم‌سازی‌ های سنگین و پیچیده بدون دریافت خطای 1101 به شکل عادی به کار خود ادامه می‌دهد. امتحان کنید.
+>
+> 📈 **پنل حرفه‌ای اطلاعات:** این پروژه دارای یک رابط کاربری حرفه‌ای برای نمایش پیکربندی‌ کانفیگ‌ها و اطلاعات شبکه و کانکشن شما می‌باشد.
+>   
+> 🧠 **دریافت خودکار آی‌پی:** آی‌پی‌های تمیز به صورت خودکار از مخازن معتبر گیت‌هاب دریافت و در کانفیگ‌هلی موجود در لینک ساب‌اسکریپشن شما قرار می‌گیرند.
+>   
+> 🔄 **بروزرسانی لینک ساب:** با هر بار آپدیت اشتراک در کلاینت، آی‌پی‌های جدید جایگزین می‌شوند.
+>   
+> 💻 **سه روش نصب متفاوت:** مناسب برای کاربران مبتدی تا حرفه‌ای (Fork، copy/paste، استفاده از فایل _worker.js).
+> 
+> 🖱️ **اتصال با یک کلیک:** دکمه‌های آماده برای وارد کردن لینک اشتراک به محبوب‌ترین کلاینت‌ها.
+> 
 
-## User Interface (UI)
+</div>
+   
+## نحوه راه‌اندازی
 
-This project includes a professional UI built with HTML, CSS, and JavaScript, served via GitHub Pages from the `index.html` file in this repository.
+شما می‌تونید به یکی از سه روش زیر پروژه رو روی اکانت کلادفلر خود دپلوی کنید.
 
-**Modifying the UI:**
+### روش اول 
+ ‏**Fork و اتصال به گیت‌هاب (پیشنهادی)**
+ 
+این بهترین و ساده‌ترین روش برای مدیریت و بروزرسانی‌های آینده است.
 
-If you fork this project and want to modify the UI:
+**کپی کردن پروژه:**
+ابتدا این مخزن (Repository) را در اکانت گیت‌هاب خود Fork کنید.  
+‏**ورود به کلادفلر:** وارد داشبورد Cloudflare خود شوید.  
+**ساخت پروژه:** در نوار ابزار بالای سایت روی "Add" یا در موبایل روی آیکون "+" کلیک کرده سپس "Pages" را انتخاب کنید. همچنین می‌توان از منوی سمت چپ از بخش Build و سپس سپس Compute & Ai به بخش worker & Pages دست یافت.  
+در صفحه جدید گزینه "Import an existing Git repository" را انتخاب کنید.  
+در قسمت اول اگر به اکانت خود متصل نبودید "Connect to Git" را بزنید.  
+**انتخاب مخزن:** مخزن فورک شده خود را انتخاب کنید و Begin setup را بزنید.
 
-1.  **Enable GitHub Pages:**
-    *   Go to your forked repository's **Settings**.
-    *   Navigate to the **Pages** section under "Code and automation".
-    *   In the "Build and deployment" section, under "Source", select **GitHub Actions**. (If you prefer to deploy from a branch, you can select your `main` branch and `/ (root)` folder, then save).
-2.  **Update UI Host URL:**
-    *   Open the `index.js` file.
-    *   On line 22, update the `HTML_URL` constant to your GitHub Pages URL (e.g., `https://your-username.github.io/your-repo-name/`).
-3.  **Apply Changes:**
-    *   Any changes you commit and push to your `index.html` file (and related CSS/JS) will now be reflected on your live GitHub Pages site.
+<br/>
+  
+**تنظیمات دپلوی:**  
+ ‏**Project name:** یک نام دلخواه برای پروژه‌تان انتخاب کنید.  
+ 
+  ‏**Production branch:** شاخه main را انتخاب کنید.  
+  
+   ‏**Framework preset:** گزینه None را انتخاب کنید.  
 
-## API Services
+**ذخیره و دپلوی:** روی Save and Deploy کلیک کنید. پروژه شما در چند ثانیه دپلوی خواهد شد!  
 
-The UI utilizes API services to detect and display your IP address and the proxy server's IP information:
+همچنین می‌توان از دکمه زیر برای دپلوی مستقیم pages استفاده کرد. (فقط اسم انتخاب می‌کنید)
 
-*   **Client IP Information:** Uses a combination of `api.ipify.org` (to get the public IP) and Scamalytics (via a Cloudflare Worker endpoint defined in `index.js`) to display your IP, location, ISP, and a risk score.
-*   **Proxy IP Information:** Uses `ip-api.io` to display the proxy server's IP, location, and ISP.
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/NiREvil/zizifn)
 
-These services are generally sufficient for personal use.
+<br/> 
 
-**Important for Public Forks:**
+### روش دوم  
+**کپی و پست مستقیم (سریع‌ترین روش)**
 
-If you intend to make your fork public or anticipate high traffic, it is strongly recommended to:
+این روش برای تست سریع و بدون نیاز به گیت‌هاب مناسب است.
 
-1.  **Use Your Own Scamalytics API Key:**
-    *   Obtain a free or paid API key from [Scamalytics](https://scamalytics.com/).
-    *   In your Cloudflare Worker, set the `SCAMALYTICS_USERNAME` and `SCAMALYTICS_API_KEY` environment variables. Alternatively, you can update the default values directly in `index.js` (lines 25 and 26), but environment variables are recommended for security.
-2.  The other services (`api.ipify.org`, `ip-api.io`) are public, but be mindful of their rate limits if you expect very high usage.
+**ورود به کلادفلر:** وارد داشبورد Cloudflare شوید.
 
-## Original Project
+**ساخت ورکر:**  
+در نوار ابزار بالای سایت روی "Add" یا در موبایل روی آیکون "+" کلیک کرده سپس "Workera" را انتخاب کنید.  
+روی دکمه Get Start مقابل "Start with Hello World!" کلیک کرده و سپس یک نام دلخواه برای ورکر خود انتخاب کنید. سپس Deploy را بزنید.  
 
-This project is based on the work of zizifn and has been updated with a new UI and enhanced functionality.
+**کپی کردن کد:** پس از اتما ساخت وورکر روی Edit code کلیک کنید.  
+محتویات فایل کد نرمال [index.js](./index.js) و یا کد فشرده شده (مبهم نه) [_worker.js](./_worker.js) را کپی کرده و به طور کامل جایگزین کدهای موجود در ویرایشگر کلادفلر کنید.  
+**ذخیره:** روی دکمه آبی رنگ Deploy کلیک کنید.
+
+<br/> 
+
+### روش سوم
+**استفاده از _worker.js (برای Pages)**
+
+این روش به شما اجازه می‌دهد از فایل کد پروژه را برای دیپلوی در Cloudflare Pages (بدون اتصال به اکانت گیت‌هاب) استفاده کنید.  
+
+فایل [_worker.js](./_worker.js) را از همین مخزن دانلود کنید.  
+در کلادفلر، به بخش Pages بروید.  
+
+در تب Pages روی دکمه Get Start مقابلDrag and drop your files کلیک کرده و در صفحه بعدی برای پروژه خود یک نام انتخاب کرده و سپس فایل _worker.js را آپلود کنید تا پروسه دپلوی آغاز شود.
+
+ <br/> 
+
+## تنظیمات و متغیرها
+
+بعد از راه‌اندازی، باید متغیرهای محیطی (Environment Variables) را برای شخصی‌سازی کانفیگ‌های خود تنظیم کنید. این متغیرها را در داشبورد پروژه خود در کلادفلر، در مسیر زیر اضافه کنید:
+
+> worker & Pages > Settings > Variables and Secrets > Add variable.
+
+<br/> 
+
+| **متغیر** | **توضیحات** | **الزامی - اختیاری** | *مقدار پیش‌فرض** |
+|:---|:-----------|:---:|:----------|
+| UUID | شناسه کاربری منحصر به فرد شما. این متغیر برای امنیت ضروری است. | الزامی | برای ساخت، به [UUID Generator][2] مراجعه کنید. |
+| PROXYIP | یک IP یا دامنه برای fronting. این آدرس به عنوان آی‌پی جایگزین موقع بازدید از وب‌سایت و سرویس‌های پشت کلادفلر مانند speedtest و whoer استفاده می‌شود. از [مخزن پروکسی آی‌پی][3] ما پیشنهادی یک مورد را انتخاب کنید. | اختیاری | مقدار پیشفرض: `nima.nscl.ir` هفتاد پروکسی آمریکا از بهترین ارائه دهنده‌ها  |
+| SCAMALYTICS_USERNAME | نام کاربری سرویس Scamalytics برای تحلیل IP. | اختیاری | برای مصرف شخصی نیاز نیست. در صورت استفاده عمومی و فورک‌های زیاد، از سایت [Scamalytics][4] درخواست API شخصی بدهید. در عرض ۲۴ ساعت اطلاعات سرویس ایمیل می‌شود. |
+| SCAMALYTICS_API_KEY | کلید API سرویس Scamalytics. | اختیاری | همراه با نام کاربری از سایت Scamalytics دریافت می‌شود. |
+| SCAMALYTICS_BASEURL | اندپوینت سرویس Scamalytics. | اختیاری | همراه با نام کاربری و api برای شما ایمیل میشود.  |
+
+<br/> 
+
+## نحوه استفاده
+
+### ۱. دسترسی به پنل مدیریت
+پس از دیلوی، کافیست UUID خود را به انتهای آدرس ورکر یا پیج خود اضافه کنید:
+
+`https://<Your-Worker-URL>/<Your-UUID>`
+
+برای مثال:
+
+`https://my-proxy.pages.dev/d342d11e-d424-4583-b36e-524ab1f0afa4`
+
+در داخل پنل می‌توانید کانفیگ‌های اصلی، لینک اشتراک و اطلاعات شبکه و کلیدهای اصافه کردن لینک ساب داخل کلاینت‌ها را مشاهده کنید.
+
+<br/> 
+
+### ۲. دریافت لینک اشتراک (Subscription)
+لینک اشتراک شما شامل ده‌ها کانفیگ مبتنی بر آی‌پی‌های تمیز و بروز است. برای دریافت آن به صورت دستی، عبارت ipsub را بین آدرس ورکر و UUID خود قرار دهید:
+
+`https://<Your-Worker-URL>/ipsub/<Your-UUID>`
+
+برای مثال:
+
+`https://my-proxy.pages.dev/ipsub/d342d11e-d424-4583-b36e-524ab1f0afa4`
+
+نکته: آی‌پی‌های این لینک از مخزن آی‌پی تمیز [NiREvil/vless][5] تامین می‌شوند و با هر بار آپدیت کانفیگ‌های داخل کلاینت شما، تازه می‌شوند.
+
+<br/> 
+
+### ۳. اتصال با یک کلیک
+برای راحتی، می‌توانید از دکمه‌های موجود در پنل مدیریت برای وارد کردن خودکار لینک اشتراک به کلاینت‌های محبوب زیر استفاده کنید:
+ * 📱 Hiddify, Singbox 
+ * 🤖 V2RayNG, MahsaNG
+ * 🐱 Clash Meta, Nekobox
+ * 📦 Exclave, SagerNet
+
+<hr/><br/> 
+
+[ZiZifn]: https://github.com/zizifn/edgetunnel
+[2]: https://www.uuidgenerator.net
+[3]: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+[4]: https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
+[5]: https://github.com/NiREvil/vless/blob/main/Cloudflare-IPs.json
