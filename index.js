@@ -1,5 +1,3 @@
-// @ts-nocheck
-
 import { connect } from 'cloudflare:sockets';
 
 // --- Configuration ---
@@ -385,7 +383,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VLESS Proxy Configuration</title>
-    <link rel="icon" href="https://raw.githubusercontent.com/sahar-km/zx/refs/heads/main/assets/revil-logo-transparent.png" type="image/png">
+    <link rel="icon" href="https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Legacy/assets/favicon-transparent.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
