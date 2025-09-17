@@ -1,64 +1,86 @@
-# Custom vless-ws-tls Proxy on Cloudflare
+## Custom vless-ws-tls Proxy on Cloudflare
 
-This project allows you to deploy a high-speed, custom `vless-ws-tls` proxy using Cloudflare Workers and Cloudflare Pages. It features a professional user interface to display proxy configuration and network information.
+> Base on [ZiZifn] EdgeTunnel
 
-## Deployment
+این پروژه به شما اجازه می‌دهد تا بدون نیاز به سرور شخصی، تنها با استفاده از Cloudflare Workers و Pages، یک پروکسی امن و پایدار برای خود یا دوستانتان داشته باشید. تمام پردازش‌ها در شبکه کلادفلر انجام می‌شود و شما از سرعت و امنیت این زیرساخت بهره‌مند خواهید شد.
+همچنین این پروژه دارای یک رابط کاربری حرفه‌ای برای نمایش پیکربندی پروکسی و اطلاعات شبکه است.
 
-You can deploy this project on either Cloudflare Workers or Cloudflare Pages.
+<br/> 
 
-## Environment Variables
+ ## برخی از ویژگی‌ها
 
-The following environment variables can be configured in your Cloudflare Worker/Pages settings:
 
-*   **`UUID`** (Recommended)
-    *   Your unique user ID.
-    *   It is highly recommended to set this to your own UUID.
-    *   You can generate one from a UUID generator website (e.g., [uuidgenerator.net](https://www.uuidgenerator.net)).
-*   **`PROXYIP`** (Optional)
-    *   The IP address of the proxy server.
-    *   Default: `turk.radicalization.ir`
-    *   Alternative: `nima.nacl.ir`
-*   **`DNS_RESOLVER`** (Optional)
-    *   The DNS resolver address.
-    *   Default: `1.1.1.1`
-    *   Alternative: `8.8.8.8` (It's generally best to keep the default).
+> 
+> 🧩 **راه‌اندازی سریع و آسان:** در کمتر از ۵ دقیقه و با چند کلیک، پروکسی شما آماده است.
+>
+> ⚙️ **کد سمت‌سرور قدرتمند:** کد‌ بک‌اند این پروژه بدون نیاز به مبهم‌سازی‌ های سنگین و پیچیده بدون دریافت خطای 1101 به شکل عادی به کار خود ادامه می‌دهد. امتحان کنید.
+>
+> 📈 **پنل حرفه‌ای اطلاعات:** این پروژه دارای یک رابط کاربری حرفه‌ای برای نمایش پیکربندی‌ کانفیگ‌ها و اطلاعات شبکه و کانکشن شما می‌باشد.
+>   
+> 🧠 **دریافت خودکار آی‌پی:** آی‌پی‌های تمیز به صورت خودکار از مخازن معتبر گیت‌هاب دریافت و در کانفیگ‌هلی موجود در لینک ساب‌اسکریپشن شما قرار می‌گیرند.
+>   
+> 🔄 **بروزرسانی لینک ساب:** با هر بار آپدیت اشتراک در کلاینت، آی‌پی‌های جدید جایگزین می‌شوند.
+>   
+> 💻 **سه روش نصب متفاوت:** مناسب برای کاربران مبتدی تا حرفه‌ای (Fork، copy/paste، استفاده از فایل _worker.js).
+> 
+> 🖱️ **اتصال با یک کلیک:** دکمه‌های آماده برای وارد کردن لینک اشتراک به محبوب‌ترین کلاینت‌ها.
+> 
 
-## User Interface (UI)
+</div>
+   
+## نحوه راه‌اندازی
 
-This project includes a professional UI built with HTML, CSS, and JavaScript, served via GitHub Pages from the `index.html` file in this repository.
+شما می‌تونید به یکی از سه روش زیر پروژه رو روی اکانت کلادفلر خود دپلوی کنید.
+### روش اول: Fork و اتصال به گیت‌هاب (پیشنهادی)
+این بهترین و ساده‌ترین روش برای مدیریت و بروزرسانی‌های آینده است.
+ * Fork کردن پروژه: ابتدا این مخزن (Repository) را در اکانت گیت‌هاب خود Fork کنید.
+ * ورود به کلادفلر: وارد داشبورد Cloudflare خود شوید.
+ * ساخت پروژه: به بخش Workers & Pages رفته و روی Create application کلیک کنید. سپس تب Pages را انتخاب کرده و Connect to Git را بزنید.
+ * انتخاب مخزن: مخزن فورک شده خود را انتخاب کنید و Begin setup را بزنید.
+ * تنظیمات دیپلوی:
+   * Project name: یک نام دلخواه برای پروژه‌تان انتخاب کنید.
+   * Production branch: شاخه main را انتخاب کنید.
+   * Framework preset: گزینه None را انتخاب کنید.
+ * ذخیره و دیپلوی: روی Save and Deploy کلیک کنید. پروژه شما در چند ثانیه دیپلوی خواهد شد!
+### روش دوم: کپی و پیست مستقیم (سریع‌ترین روش)
+این روش برای تست سریع و بدون نیاز به گیت‌هاب مناسب است.
+ * ورود به کلادفلر: وارد داشبورد Cloudflare و بخش Workers & Pages شوید.
+ * ساخت ورکر: روی Create application کلیک کرده و یک نام دلخواه برای ورکر خود انتخاب کنید. سپس Deploy را بزنید.
+ * کپی کردن کد: روی Edit code کلیک کنید. محتویات فایل index.js از این مخزن را کپی کرده و به طور کامل جایگزین کدهای موجود در ویرایشگر کلادفلر کنید.
+ * ذخیره: روی Save and Deploy کلیک کنید.
+### روش سوم: استفاده از _worker.js (برای Pages)
+این روش به شما اجازه می‌دهد از فایل مبهم‌سازی شده برای دیپلوی در Cloudflare Pages (بدون اتصال به گیت) استفاده کنید.
+ * فایل _worker.js را از این مخزن دانلود کنید.
+ * در داشبورد کلادفلر، به بخش Workers & Pages بروید.
+ * در تب Pages روی Upload assets کلیک کرده و فایل _worker.js را آپلود کنید.
+⚙️ تنظیمات و متغیرها
+بعد از راه‌اندازی، باید متغیرهای محیطی (Environment Variables) را برای شخصی‌سازی پروکسی خود تنظیم کنید. این متغیرها را در داشبورد پروژه خود در کلادفلر، در مسیر زیر اضافه کنید:
+Settings > Variables > Environment Variables > Add variable
+| متغیر | توضیحات | الزامی/اختیاری | مقدار پیش‌فرض/نمونه |
+|---|---|---|---|
+| UUID | شناسه کاربری منحصر به فرد شما. این متغیر برای امنیت ضروری است. | الزامی | برای ساخت، به UUID Generator مراجعه کنید. |
+| PROXYIP | یک IP یا دامنه برای fronting. این آدرس به عنوان آی‌پی جایگزین در کانفیگ‌ها استفاده می‌شود. | اختیاری | از مخزن پیشنهادی یک مورد را انتخاب کنید. |
+| SCAMALYTICS_USERNAME | نام کاربری سرویس Scamalytics برای تحلیل IP. | اختیاری | برای مصرف شخصی نیاز نیست. در صورت استفاده عمومی و فورک‌های زیاد، از سایت Scamalytics اکانت بسازید. |
+| SCAMALYTICS_API_KEY | کلید API سرویس Scamalytics. | اختیاری | همراه با نام کاربری از سایت Scamalytics دریافت می‌شود. |
+🔗 نحوه استفاده
+### ۱. دسترسی به پنل مدیریت
+پس از دیپلوی، کافیست UUID خود را به انتهای آدرس ورکر یا پیج خود اضافه کنید:
+https://<Your-Worker-URL>/<Your-UUID>
+برای مثال:
+https://my-proxy.pages.dev/d342d11e-d424-4583-b36e-524ab1f0afa4
+در این صفحه می‌توانید کانفیگ‌های اصلی، لینک اشتراک و اطلاعات شبکه را مشاهده کنید.
+### ۲. دریافت لینک اشتراک (Subscription)
+لینک اشتراک شما شامل ده‌ها کانفیگ مبتنی بر آی‌پی‌های تمیز و بروز است. برای دریافت آن، عبارت ipsub را بین آدرس ورکر و UUID خود قرار دهید:
+https://<Your-Worker-URL>/ipsub/<Your-UUID>
+برای مثال:
+https://my-proxy.pages.dev/ipsub/d342d11e-d424-4583-b36e-524ab1f0afa4
+نکته: آی‌پی‌های این لینک از مخزن آی‌پی تمیز REvil گرفته می‌شوند و با هر بار آپدیت اشتراک در کلاینت شما، تازه می‌شوند.
 
-**Modifying the UI:**
+### ۳. اتصال با یک کلیک
+برای راحتی، می‌توانید از دکمه‌های موجود در پنل مدیریت برای وارد کردن خودکار لینک اشتراک به کلاینت‌های محبوب زیر استفاده کنید:
+ * 📱 Hiddify, Singbox 
+ * 🤖 V2RayNG, MahsaNG
+ * 🐱 Clash Meta, Nekobox
+ * 📦 Exclave, SagerNet
 
-If you fork this project and want to modify the UI:
-
-1.  **Enable GitHub Pages:**
-    *   Go to your forked repository's **Settings**.
-    *   Navigate to the **Pages** section under "Code and automation".
-    *   In the "Build and deployment" section, under "Source", select **GitHub Actions**. (If you prefer to deploy from a branch, you can select your `main` branch and `/ (root)` folder, then save).
-2.  **Update UI Host URL:**
-    *   Open the `index.js` file.
-    *   On line 22, update the `HTML_URL` constant to your GitHub Pages URL (e.g., `https://your-username.github.io/your-repo-name/`).
-3.  **Apply Changes:**
-    *   Any changes you commit and push to your `index.html` file (and related CSS/JS) will now be reflected on your live GitHub Pages site.
-
-## API Services
-
-The UI utilizes API services to detect and display your IP address and the proxy server's IP information:
-
-*   **Client IP Information:** Uses a combination of `api.ipify.org` (to get the public IP) and Scamalytics (via a Cloudflare Worker endpoint defined in `index.js`) to display your IP, location, ISP, and a risk score.
-*   **Proxy IP Information:** Uses `ip-api.io` to display the proxy server's IP, location, and ISP.
-
-These services are generally sufficient for personal use.
-
-**Important for Public Forks:**
-
-If you intend to make your fork public or anticipate high traffic, it is strongly recommended to:
-
-1.  **Use Your Own Scamalytics API Key:**
-    *   Obtain a free or paid API key from [Scamalytics](https://scamalytics.com/).
-    *   In your Cloudflare Worker, set the `SCAMALYTICS_USERNAME` and `SCAMALYTICS_API_KEY` environment variables. Alternatively, you can update the default values directly in `index.js` (lines 25 and 26), but environment variables are recommended for security.
-2.  The other services (`api.ipify.org`, `ip-api.io`) are public, but be mindful of their rate limits if you expect very high usage.
-
-## Original Project
-
-This project is based on the work of zizifn and has been updated with a new UI and enhanced functionality.
+[ZiZifn]: https://github.com/zizifn/edgetunnel
