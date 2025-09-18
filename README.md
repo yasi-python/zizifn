@@ -153,7 +153,7 @@
 > برای کلاینت‌هایی که از هسته‌ی SingBox استفاده می‌کنند مانند:  
 > Nekobox, Exclave, Singbox, Husi, Karing, and etc.
 >
-> نکته بعدی:
+> 
 >  آی‌پی‌های این لینک اشتراک‌ها از مخزن آی‌پی تمیز [NiREvil/vless][5] تامین می‌شوند و هر ۳ ساعت یکبار آپدیت می‌شوند.
 
 <br/> 
@@ -162,12 +162,16 @@
 برای راحتی، می‌توانید از دکمه‌های موجود در پنل مدیریت برای وارد کردن خودکار لینک اشتراک به کلاینت‌های محبوب زیر استفاده کنید:
  * 📱 Hiddify, Singbox 
  * 🤖 V2RayNG, MahsaNG
+ * 🦋 Streisand, Nekoray
+ * ♨️ ProxyCloud, Husi
  * 🐱 Clash Meta, Nekobox
  * 📦 Exclave, Karing
 
 
+
 ## Credits
-Many thanks to [ZiZifn] and Dera [NiREvil]
+
+Many thanks to [ZiZifn] and Dear [NiREvil]
 
 <hr/><br/> 
 
