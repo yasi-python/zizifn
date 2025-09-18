@@ -48,64 +48,128 @@ const Config = {
   },
 };
 
-const CONSTANTS = {
-  VLESS_PROTOCOL: 'vless',
+const CONST = {
+  ED_PARAMS: { ed: 2560, eh: 'Sec-WebSocket-Protocol' },
   AT_SYMBOL: '@',
-  URL_ED_PARAM: 'ed=2560',
+  VLESS_PROTOCOL: 'vless',
   WS_READY_STATE_OPEN: 1,
   WS_READY_STATE_CLOSING: 2,
 };
 
 /**
  * Generates a random path string for WebSocket connection.
- * @param {number} length - Length of path.
- * @returns {string}
+ * @param {number} length - Length of the random path part.
+ * @param {string} [query] - Optional query string to append (e.g., 'ed=2048').
+ * @returns {string} The generated path.
  */
-function generateRandomPath(length = 12) {
+function generateRandomPath(length = 12, query = '') {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
   for (let i = 0; i < length; i++) {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
-  return `/${result}?${CONSTANTS.URL_ED_PARAM}`;
+  return `/${result}${query ? `?${query}` : ''}`;
 }
 
-/**
- * Generates a unique configuration name.
- * @param {string} domain
- * @param {string} protocol
- * @param {number|string} port
- * @param {string|number} [index]
- * @returns {string}
- */
-function generateConfigName(domain, protocol, port, index = '') {
-  const domainShort = domain.split('.')[0].substring(0, 8);
-  const protocolShort = protocol === 'https' ? 'TLS' : 'TCP';
-  const suffix = index ? `-${index}` : '';
-  return `${domainShort}-${protocolShort}-${port}${suffix}`;
+const CORE_PRESETS = {
+  /* Xray cores – Dream */
+  xray: {
+    tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls',  fp: 'chrome',  alpn: 'http/1.1', extra: {} },
+    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome',                extra: {} },
+  },
+
+  /* Singbox cores – Freedom */
+  sb: {
+    tls: { path: () => generateRandomPath(18), security: 'tls',  fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
+    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox',             extra: CONST.ED_PARAMS },
+  },
+};
+
+function makeName(tag, proto) {
+  return `${tag}-${proto.toUpperCase()}`;
 }
 
-/**
- * Creates a VLESS protocol link.
- * @param {object} options
- * @returns {string}
- */
-function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, name,
-  extra = {}
+function createVlessLink({
+  userID, address, port, host, path,
+  security, sni, fp, alpn, extra = {}, name,
 }) {
-  const params = new URLSearchParams();
-  params.set('type', 'ws');
-  params.set('host', host);
-  params.set('path', path);
+  const params = new URLSearchParams({
+    type: 'ws',
+    host,
+    path,
+  });
 
   if (security) params.set('security', security);
-  if (sni) params.set('sni', sni);
-  if (fp) params.set('fp', fp);
-  if (alpn) params.set('alpn', alpn);
-  
+  if (sni)      params.set('sni',      sni);
+  if (fp)       params.set('fp',       fp);
+  if (alpn)     params.set('alpn',     alpn);
+
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
 
   return `vless://${userID}@${address}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
+}
+
+function buildLink({ core, proto, userID, hostName, address, port, tag }) {
+  const p = CORE_PRESETS[core][proto];
+  return createVlessLink({
+    userID,
+    address,
+    port,
+    host: hostName,
+    path: p.path(), // Calling path() as a function to generate a new random path
+    security: p.security,
+    sni: p.security === 'tls' ? hostName : undefined,
+    fp: p.fp,
+    alpn: p.alpn,
+    extra: p.extra,
+    name: makeName(tag, proto),
+  });
+}
+
+const pick = (/** @type {string | any[]} */ arr) => arr[Math.floor(Math.random() * arr.length)];
+
+/**
+ * @param {string} core
+ * @param {any} userID
+ * @param {string} hostName
+ */
+async function handleIpSubscription(core, userID, hostName) {
+  const mainDomains = [
+    hostName, 'creativecommons.org', 'www.speedtest.net',
+    'sky.rethinkdns.com', 'cfip.1323123.xyz', 'cfip.xxxxxxxx.tk',
+    'go.inmobi.com', 'singapore.com', 'www.visa.com',
+    'cf.090227.xyz', 'cdnjs.com', 'zula.ir',
+  ];
+
+  const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
+  const httpPorts  = [ 80, 8080, 8880, 2052, 2082, 2086, 2095];
+
+  let links = [];
+
+  mainDomains.forEach((domain, i) => {
+    links.push(
+      buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts),  tag: `D${i+1}` }),
+      buildLink({ core, proto: 'tls', userID, hostName, address: domain, port: pick(httpsPorts), tag: `D${i+1}` }),
+    );
+  });
+
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
+    if (r.ok) {
+      const json = await r.json();
+      const ips = [...(json.ipv4||[]), ...(json.ipv6||[])].slice(0, 20).map(x => x.ip);
+      ips.forEach((ip, i) => {
+        links.push(
+          buildLink({ core, proto: 'tcp', userID, hostName, address: ip, port: pick(httpPorts),  tag: `IP${i+1}` }),
+          buildLink({ core, proto: 'tls', userID, hostName, address: ip, port: pick(httpsPorts), tag: `IP${i+1}` }),
+        );
+      });
+    }
+  } catch (e) { console.error('Fetch IP list failed', e); }
+
+  return new Response(btoa(links.join('\n')), {
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  });
 }
 
 export default {
@@ -115,178 +179,41 @@ export default {
    * @param {any} ctx
    */
   async fetch(request, env, ctx) {
-    try {
-      const config = Config.fromEnv(env);
-      const url = new URL(request.url);
+    const cfg = Config.fromEnv(env);
+    const url = new URL(request.url);
+    
+    const upgradeHeader = request.headers.get('Upgrade');
+    if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+      const requestConfig = {
+        userID: cfg.userID,
+        proxyIP: cfg.proxyIP,
+        proxyPort: cfg.proxyPort,
+        socks5Address: cfg.socks5.address,
+        socks5Relay: cfg.socks5.relayMode,
+        enableSocks: cfg.socks5.enabled,
+        parsedSocks5Address: cfg.socks5.enabled
+          ? socks5AddressParser(cfg.socks5.address)
+          : {},
+      };
 
-      const upgradeHeader = request.headers.get('Upgrade');
-      if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-        const requestConfig = {
-          userID: config.userID,
-          proxyIP: config.proxyIP,
-          proxyPort: config.proxyPort,
-          socks5Address: config.socks5.address,
-          socks5Relay: config.socks5.relayMode,
-          enableSocks: config.socks5.enabled,
-          parsedSocks5Address: config.socks5.enabled
-            ? socks5AddressParser(config.socks5.address)
-            : {},
-        };
-        return ProtocolOverWSHandler(request, requestConfig);
-      }
-
-      if (url.pathname === '/scamalytics-lookup') {
-        return handleScamalyticsLookup(request, config);
-      }
-
-      const isUserMatch = url.pathname.includes(`/${config.userID}`);
-      if (!isUserMatch) {
-        return new Response('404 — UUID Not Found. Peace & Love', { status: 404 });
-      }
-
-      if (url.pathname.startsWith(`/ipsub/${config.userID}`)) {
-        return handleIpSubscription(config.userID, url.hostname);
-      }
-      if (url.pathname.startsWith(`/${config.userID}`)) {
-        return handleConfigRequestPage(config.userID, url.hostname, config.proxyAddress);
-      }
-
-      return new Response('Not Found', { status: 404 });
-    } catch (err) {
-      console.error(err);
-      return new Response('Internal Server Error', { status: 500 });
+      return ProtocolOverWSHandler(request, requestConfig);
     }
+    
+    if (url.pathname === '/scamalytics-lookup')
+      return handleScamalyticsLookup(request, cfg);
+
+    if (url.pathname.startsWith(`/ipsub/xray/${cfg.userID}`))
+      return handleIpSubscription('xray', cfg.userID, url.hostname);
+
+    if (url.pathname.startsWith(`/ipsub/sb/${cfg.userID}`))
+      return handleIpSubscription('sb', cfg.userID, url.hostname);
+
+    if (url.pathname.startsWith(`/${cfg.userID}`))
+      return handleConfigPage(cfg.userID, url.hostname, cfg.proxyAddress);
+
+    return new Response('Not Found', { status: 404 });
   },
 };
-
-/**
- * Serve the configuration HTML page.
- * @param {string} userID
- * @param {string} hostName
- * @param {string} proxyAddress
- * @returns {Response}
- */
-function handleConfigRequestPage(userID, hostName, proxyAddress) {
-  const content = generateBeautifulConfigPage(userID, hostName, proxyAddress);
-  return new Response(content, {
-    status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
-  });
-}
-
-/**
- * Generates subscription links using both static domains and dynamic IPs.
- * @param {string} matchingUserID
- * @param {string} hostName
- * @returns {Promise<Response>}
- */
-async function handleIpSubscription(matchingUserID, hostName) {
-  // Static domains as a reliable fallback
-  const mainDomains = [
-    hostName,
-    'creativecommons.org',
-    'www.speedtest.net',
-    'sky.rethinkdns.com',
-    'cfip.1323123.xyz',
-    'cfip.xxxxxxxx.tk',
-    'go.inmobi.com',
-    'singapore.com',
-    'www.visa.com',
-    'cf.090227.xyz',
-    'cdnjs.com',
-    'zula.ir',
-  ];
-
-  const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
-  const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
-  let allConfigs = [];
-
-  mainDomains.forEach((domain, index) => {
-    const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
-    allConfigs.push(
-      createVlessLink({
-        userID: matchingUserID,
-        address: domain,
-        port: httpPort,
-        host: hostName,
-        path: generateRandomPath(),
-        security: 'none',
-        fp: 'chrome',
-        name: generateConfigName(domain, 'http', httpPort, `D${index + 1}`),
-      }),
-    );
-    const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
-    allConfigs.push(
-      createVlessLink({
-        userID: matchingUserID,
-        address: domain,
-        port: httpsPort,
-        host: hostName,
-        path: generateRandomPath(),
-        security: 'tls',
-        sni: hostName,
-        fp: 'firefox',
-        name: generateConfigName(domain, 'https', httpsPort, `D${index + 1}`),
-      }),
-    );
-  });
-
-  try {
-	// Try to fetch dynamic Cloudflare Clean IPs
-    const response = await fetch(
-      'https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json',
-    );
-    if (response.ok) {
-      const data = await response.json();
-      const ips = [...(data.ipv4 || []), ...(data.ipv6 || [])].map(item => item.ip);
-      const selectedIps = ips.slice(0, 20);
-
-      selectedIps.forEach((ip, index) => {
-        const httpPort = httpPorts[Math.floor(Math.random() * httpPorts.length)];
-        allConfigs.push(
-          createVlessLink({
-            userID: matchingUserID,
-            address: ip,
-            port: httpPort,
-            host: hostName,
-            path: generateRandomPath(),
-            security: 'none',
-            fp: 'chrome',
-            name: generateConfigName(ip, 'http', httpPort, `IP${index + 1}`),
-          }),
-        );
-        const httpsPort = httpsPorts[Math.floor(Math.random() * httpsPorts.length)];
-        allConfigs.push(
-          createVlessLink({
-            userID: matchingUserID,
-            address: ip,
-            port: httpsPort,
-            host: hostName,
-            path: generateRandomPath(),
-            security: 'tls',
-            sni: hostName,
-            fp: 'firefox',
-            name: generateConfigName(ip, 'https', httpsPort, `IP${index + 1}`),
-          }),
-        );
-      });
-    } else {
-      console.warn(`Failed to fetch IPs, using domain configs only. Status: ${response.status}`);
-    }
-  } catch (error) {
-    console.error(`Error fetching IPs, using domain configs only: ${error.message}`);
-  }
-
-  if (allConfigs.length === 0) {
-    return new Response('Failed to generate any subscription configurations.', { status: 500 });
-  }
-
-  return new Response(btoa(allConfigs.join('\n')), {
-    status: 200,
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-  });
-}
-
 
 /**
  * Performs Scamalytics IP lookup using API.
@@ -331,52 +258,40 @@ async function handleScamalyticsLookup(request, config) {
 }
 
 /**
- * Generates the configuration HTML page.
- * @param {string} userID
+ * @param {any} userID
  * @param {string} hostName
  * @param {string} proxyAddress
- * @returns {string} Full HTML string.
+ */
+function handleConfigPage(userID, hostName, proxyAddress) {
+  const html = generateBeautifulConfigPage(userID, hostName, proxyAddress);
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+/**
+ * @param {any} userID
+ * @param {string} hostName
+ * @param {string} proxyAddress
  */
 function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
-  const subUrl = `https://${hostName}/ipsub/${userID}`;
-  const subUrlEncoded = encodeURIComponent(subUrl);
+  const dream = buildLink({
+    core: 'xray', proto: 'tls', userID, hostName,
+    address: hostName, port: 443, tag: `${hostName}-Xray`,
+  });
 
-  const configs = {
-    dream: createVlessLink({
-      userID,
-      address: hostName,
-      port: 443,
-      path: '/assets?ed=2048',
-      security: 'tls',
-      sni: hostName,
-      host: hostName,
-      fp: 'chrome',
-      alpn: 'http/1.1',
-      name: `${hostName}-Xray`,
-    }),
-    freedom: createVlessLink({
-      userID,
-      address: hostName,
-      port: 443,
-      path: '/assets',
-      security: 'tls',
-      sni: hostName,
-      host: hostName,
-      fp: 'firefox',
-      alpn: 'h3',
-      extra: {
-        ed: 2560,
-        eh: 'Sec-WebSocket-Protocol',
-      },
-      name: `${hostName}-Singbox`,
-    }),
-  };
-
+  const freedom = buildLink({
+    core: 'sb',   proto: 'tls', userID, hostName,
+    address: hostName, port: 443, tag: `${hostName}-Singbox`,
+  });
+  
+  const configs = { dream, freedom };
+  const subXrayUrl = `https://${hostName}/ipsub/xray/${userID}`;
+  const subSbUrl   = `https://${hostName}/ipsub/sb/${userID}`;
+  
   const clientUrls = {
-    clashMeta: `clash://install-config?url=https://revil-sub.pages.dev/sub/clash-meta?url=${subUrlEncoded}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`,
-    hiddify: `hiddify://install-config?url=${subUrlEncoded}`,
-    v2rayng: `v2rayng://install-config?url=${subUrlEncoded}`,
-    exclave: `sn://subscription?url=${subUrlEncoded}`,
+    clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
+    hiddify: `hiddify://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
   };
 
   let finalHTML = `
@@ -390,7 +305,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
-    <style>${getPageCSS()}</style>
+    <style>${getPageCSS()}</style> 
   </head>
   <body data-proxy-ip="${proxyAddress}">
     ${getPageHTML(configs, clientUrls)}
@@ -540,9 +455,9 @@ async function HandleTCPOutBound(
     };
   }
 
-  /*
-   * @param {any} address
-   * @param {any} port
+  /**
+   * @param {string} address
+   * @param {number} port
    */
   async function connectAndWrite(address, port, socks = false) {
     let tcpSocket;
@@ -695,7 +610,7 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
     await remoteSocket.readable.pipeTo(
       new WritableStream({
         async write(chunk) {
-          if (webSocket.readyState !== CONSTANTS.WS_READY_STATE_OPEN)
+          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN)
             throw new Error('WebSocket is not open');
           hasIncomingData = true;
           const dataToSend = protocolResponseHeader
@@ -748,8 +663,8 @@ function base64ToArrayBuffer(base64Str) {
 function safeCloseWebSocket(socket) {
   try {
     if (
-      socket.readyState === CONSTANTS.WS_READY_STATE_OPEN ||
-      socket.readyState === CONSTANTS.WS_READY_STATE_CLOSING
+      socket.readyState === CONST.WS_READY_STATE_OPEN ||
+      socket.readyState === CONST.WS_READY_STATE_CLOSING
     ) {
       socket.close();
     }
@@ -834,7 +749,7 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
             const udpSize = dnsQueryResult.byteLength;
             const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
 
-            if (webSocket.readyState === CONSTANTS.WS_READY_STATE_OPEN) {
+            if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
               log(`DNS query successful, length: ${udpSize}`);
               if (isHeaderSent) {
                 webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
