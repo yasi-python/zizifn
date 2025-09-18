@@ -211,7 +211,7 @@ export default {
     if (url.pathname.startsWith(`/${cfg.userID}`))
       return handleConfigPage(cfg.userID, url.hostname, cfg.proxyAddress);
 
-    return new Response('Not Found', { status: 404 });
+    return new Response('UUID not found. Please set the UUID environment variable in the Cloudflare dashboard.', { status: 404 });
   },
 };
 
@@ -301,7 +301,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VLESS Proxy Configuration</title>
-    <link rel="icon" href="https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Legacy/assets/favicon-transparent.png" type="image/png">
+    <link rel="icon" href="https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Legacy/assets/favicon.png" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
@@ -910,14 +910,14 @@ function getPageCSS() {
         padding: 3rem; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       }
       .container {
-        max-width: 768px; margin: 20px auto; padding: 0 12px; border-radius: var(--border-radius);
+        max-width: 800px; margin: 20px auto; padding: 0 12px; border-radius: var(--border-radius);
         box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2), 0 0 25px 8px var(--shadow-color-accent);
         transition: box-shadow var(--transition-speed-medium) ease;
       }
       .container:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), 0 0 35px 10px var(--shadow-color-accent); }
       .header { text-align: center; margin-bottom: 40px; padding-top: 30px; }
-      .header h1 { font-family: var(--serif); font-weight: 400; font-size: 2rem; color: var(--text-accent); margin-top: 0px; margin-bottom: 2px; }
-      .header p { color: var(--text-secondary); font-size: 12px; font-weight: 400; }
+      .header h1 { font-family: var(--serif); font-weight: 400; font-size: 1.8rem; color: var(--text-accent); margin-top: 0px; margin-bottom: 2px; }
+      .header p { color: var(--text-secondary); font-size: 0.6rem; font-weight: 400; }
       .config-card {
         background: var(--background-secondary); border-radius: var(--border-radius); padding: 20px; margin-bottom: 24px;
         border: 1px solid var(--border-color);
@@ -925,8 +925,8 @@ function getPageCSS() {
       }
       .config-card:hover { border-color: var(--border-color-hover); box-shadow: 0 4px 8px var(--shadow-color); }
       .config-title {
-        font-family: var(--serif); font-size: 22px; font-weight: 400; color: var(--accent-secondary);
-        margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color);
+        font-family: var(--serif); font-size: 1.6rem; font-weight: 400; color: var(--accent-secondary);
+        margin-bottom: 16px; padding-bottom: 13px; border-bottom: 1px solid var(--border-color);
         display: flex; align-items: center; justify-content: space-between;
       }
       .config-title .refresh-btn {
@@ -953,12 +953,12 @@ function getPageCSS() {
         padding: 16px; margin-bottom: 20px; border: 1px solid var(--border-color);
       }
       .config-content pre {
-        overflow-x: auto; font-family: var(--mono-serif); font-size: 12px; color: var(--text-primary);
+        overflow-x: auto; font-family: var(--mono-serif); font-size: 7px; color: var(--text-primary);
         margin: 0; white-space: pre-wrap; word-break: break-all;
       }
       .button {
         display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-        padding: 8px 16px; border-radius: var(--border-radius); font-size: 13px; font-weight: 500;
+        padding: 8px 16px; border-radius: var(--border-radius); font-size: 15px; font-weight: 500;
         cursor: pointer; border: 1px solid var(--border-color); background-color: var(--background-tertiary);
         color: var(--button-text-secondary);
         transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, color var(--transition-speed) ease, transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
@@ -968,7 +968,7 @@ function getPageCSS() {
       .button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; transition: opacity var(--transition-speed) ease; }
       .copy-buttons {
         position: relative; display: flex; gap: 4px; overflow: hidden; align-self: center;
-        font-family: var(--serif); font-size: 12px; padding: 6px 12px; border-radius: 6px;
+        font-family: var(--serif); font-size: 13px; padding: 6px 12px; border-radius: 6px;
         color: var(--accent-secondary); border: 1px solid var(--border-color);
         transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, color var(--transition-speed) ease, transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
       }
@@ -1010,7 +1010,7 @@ function getPageCSS() {
 	    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
 	    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
 	    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
-	    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 12px; }
+	    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
 	    .footer p { margin-bottom: 0px; }
 	    ::-webkit-scrollbar { width: 8px; height: 8px; }
 	    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
@@ -1062,7 +1062,25 @@ function getPageCSS() {
 	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
 	      .footer { font-size: 10px; }
 	    }
-      @media (min-width: 1024px) { .container { max-width: 800px; } }
+	    @media (max-width: 359px) {
+          body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
+          .header h1 { font-size: 16px; } .header p { font-size: 6px; }
+          .ip-info-section { padding: 12px; gap: 12px; }
+          .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+          .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
+          .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
+		  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
+          .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
+          .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
+		  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+          .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
+        }
+    
+        @media (min-width: 360px) { .container { max-width: 95%; } }
+        @media (min-width: 480px) { .container { max-width: 90%; } }
+        @media (min-width: 640px) { .container { max-width: 600px; } }
+        @media (min-width: 768px) { .container { max-width: 720px; } }
+        @media (min-width: 1024px) { .container { max-width: 800px; } }
   `;
 }
 
