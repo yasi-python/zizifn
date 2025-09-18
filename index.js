@@ -202,10 +202,10 @@ export default {
     if (url.pathname === '/scamalytics-lookup')
       return handleScamalyticsLookup(request, cfg);
 
-    if (url.pathname.startsWith(`/ipsub/xray/${cfg.userID}`))
+    if (url.pathname.startsWith(`/xray/${cfg.userID}`))
       return handleIpSubscription('xray', cfg.userID, url.hostname);
 
-    if (url.pathname.startsWith(`/ipsub/sb/${cfg.userID}`))
+    if (url.pathname.startsWith(`/sb/${cfg.userID}`))
       return handleIpSubscription('sb', cfg.userID, url.hostname);
 
     if (url.pathname.startsWith(`/${cfg.userID}`))
@@ -284,8 +284,8 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   });
   
   const configs = { dream, freedom };
-  const subXrayUrl = `https://${hostName}/ipsub/xray/${userID}`;
-  const subSbUrl   = `https://${hostName}/ipsub/sb/${userID}`;
+  const subXrayUrl = `https://${hostName}/xray/${userID}`;
+  const subSbUrl   = `https://${hostName}/sb/${userID}`;
   
   const clientUrls = {
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
@@ -1165,7 +1165,7 @@ function getPageHTML(configs, clientUrls) {
       </div>
 
       <div class="footer">
-        <p>© <span id="current-year">${new Date().getFullYear()}</span>REvil - All Rights Reserved</p>
+        <p>© <span id="current-year">${new Date().getFullYear()}</span> REvil - All Rights Reserved</p>
         <p>Secure. Private. Fast.</p>
       </div>
     </div>
