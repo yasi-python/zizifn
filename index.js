@@ -1,20 +1,30 @@
-// @ts-ignore
 import { connect } from 'cloudflare:sockets';
 
-/*
- * To generate your own UUID: https://www.uuidgenerator.net
- * Proxy IP land: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
- * You don't need to change the acamalytics values for personal use, but if many forks are going to be created from you, it's better to request a personal API. 
- * It will be sent to you via email within 24 hours. Website: https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
+/**
+ * - UUID: To generate your own UUID, visit: https://www.uuidgenerator.net
+ *   You can add multiple UUIDs by separating them with a comma (e.g., 'uuid1, uuid2').
+ * 
+ * - Proxy IP Land: A large, daily-updated repository of tested proxy IPs.
+ *   Find the list here: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+ * 
+ * - Scamalytics API: The default key is for public use. If you are creating a popular fork,
+ *   it's recommended to get your own free API key from:
+ *   https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
  */
 const Config = {
+  // Can be a single UUID or multiple UUIDs separated by commas.
   userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+
+  // An array of proxy addresses. You can add multiple proxies to the list.
+  // Example: ['proxy1.ir:8443', '1.1.1.1:443', 'proxy2.com:2053']
   proxyIPs: ['nima.nscl.ir:443'],
+  
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
     baseUrl: 'https://api12.scamalytics.com/v3/',
   },
+
   socks5: {
     enabled: false,
     relayMode: false,
@@ -72,19 +82,23 @@ function generateRandomPath(length = 12, query = '') {
 }
 
 const CORE_PRESETS = {
-  /* Xray cores – Dream */
+  // --- Xray cores – Dream ---
   xray: {
     tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls',  fp: 'chrome',  alpn: 'http/1.1', extra: {} },
-    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome',                extra: {} },
+    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome',                    extra: {} },
   },
 
-  /* Singbox cores – Freedom */
+  // ---Singbox cores – Freedom ---
   sb: {
     tls: { path: () => generateRandomPath(18), security: 'tls',  fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
     tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox',             extra: CONST.ED_PARAMS },
   },
 };
 
+/**
+ * @param {any} tag
+ * @param {string} proto
+ */
 function makeName(tag, proto) {
   return `${tag}-${proto.toUpperCase()}`;
 }
@@ -116,7 +130,7 @@ function buildLink({ core, proto, userID, hostName, address, port, tag }) {
     address,
     port,
     host: hostName,
-    path: p.path(), // Calling path() as a function to generate a new random path
+    path: p.path(),
     security: p.security,
     sni: p.security === 'tls' ? hostName : undefined,
     fp: p.fp,
@@ -132,8 +146,9 @@ const pick = (/** @type {string | any[]} */ arr) => arr[Math.floor(Math.random()
  * @param {string} core
  * @param {any} userID
  * @param {string} hostName
+ * @param {boolean} isPages
  */
-async function handleIpSubscription(core, userID, hostName) {
+async function handleIpSubscription(core, userID, hostName, isPages) {
   const mainDomains = [
     hostName, 'creativecommons.org', 'www.speedtest.net',
     'sky.rethinkdns.com', 'cfip.1323123.xyz', 'cfip.xxxxxxxx.tk',
@@ -145,12 +160,19 @@ async function handleIpSubscription(core, userID, hostName) {
   const httpPorts  = [ 80, 8080, 8880, 2052, 2082, 2086, 2095];
 
   let links = [];
+  
+  const isPagesDeployment = isPages;
 
   mainDomains.forEach((domain, i) => {
     links.push(
-      buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts),  tag: `D${i+1}` }),
-      buildLink({ core, proto: 'tls', userID, hostName, address: domain, port: pick(httpsPorts), tag: `D${i+1}` }),
+      buildLink({ core, proto: 'tls', userID, hostName, address: domain, port: pick(httpsPorts), tag: `D${i+1}` })
     );
+    
+    if (!isPagesDeployment) {
+      links.push(
+        buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts),  tag: `D${i+1}` })
+      );
+    }
   });
 
   try {
@@ -158,11 +180,19 @@ async function handleIpSubscription(core, userID, hostName) {
     if (r.ok) {
       const json = await r.json();
       const ips = [...(json.ipv4||[]), ...(json.ipv6||[])].slice(0, 20).map(x => x.ip);
+      
       ips.forEach((ip, i) => {
+        const formattedAddress = ip.includes(':') ? `[${ip}]` : ip;
+
         links.push(
-          buildLink({ core, proto: 'tcp', userID, hostName, address: ip, port: pick(httpPorts),  tag: `IP${i+1}` }),
-          buildLink({ core, proto: 'tls', userID, hostName, address: ip, port: pick(httpsPorts), tag: `IP${i+1}` }),
+          buildLink({ core, proto: 'tls', userID, hostName, address: formattedAddress, port: pick(httpsPorts), tag: `IP${i+1}` })
         );
+        
+        if (!isPagesDeployment) {
+          links.push(
+            buildLink({ core, proto: 'tcp', userID, hostName, address: formattedAddress, port: pick(httpPorts),  tag: `IP${i+1}` })
+          );
+        }
       });
     }
   } catch (e) { console.error('Fetch IP list failed', e); }
@@ -172,15 +202,32 @@ async function handleIpSubscription(core, userID, hostName) {
   });
 }
 
+
 export default {
   /**
    * @param {Request<any, CfProperties<any>>} request
-   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
-   * @param {any} ctx
+   * @param {{ 
+   *   PROXYIP: string; 
+   *   UUID: any; 
+   *   SCAMALYTICS_USERNAME: any; 
+   *   SCAMALYTICS_API_KEY: any; 
+   *   SCAMALYTICS_BASEURL: any; 
+   *   SOCKS5: any; 
+   *   SOCKS5_RELAY: string;
+   *   CF_PAGES?: string;
+   * }} env
+   * @param {any} _ctx
    */
-  async fetch(request, env, ctx) {
+  async fetch(request, env, _ctx) {
     const cfg = Config.fromEnv(env);
     const url = new URL(request.url);
+    const hostName = url.hostname;
+    const userID = url.pathname.substring(1);
+    const core = url.searchParams.get('core') || 'vless';
+    const isPages = env.CF_PAGES === '1';
+    if (userID && !userID.startsWith('xray/') && !userID.startsWith('sb/') && userID === cfg.userID) {
+      return await handleIpSubscription(core, userID, hostName, isPages);
+    }
     
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
@@ -203,13 +250,13 @@ export default {
       return handleScamalyticsLookup(request, cfg);
 
     if (url.pathname.startsWith(`/xray/${cfg.userID}`))
-      return handleIpSubscription('xray', cfg.userID, url.hostname);
+      return handleIpSubscription('xray', cfg.userID, hostName, isPages);
 
     if (url.pathname.startsWith(`/sb/${cfg.userID}`))
-      return handleIpSubscription('sb', cfg.userID, url.hostname);
+      return handleIpSubscription('sb', cfg.userID, hostName, isPages);
 
     if (url.pathname.startsWith(`/${cfg.userID}`))
-      return handleConfigPage(cfg.userID, url.hostname, cfg.proxyAddress);
+      return handleConfigPage(cfg.userID, hostName, cfg.proxyAddress);
 
     return new Response('UUID not found. Please set the UUID environment variable in the Cloudflare dashboard.', { status: 404 });
   },
@@ -317,7 +364,6 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
 }
 
 /**
- * Core vless protocol logic
  * Handles VLESS protocol over WebSocket.
  * @param {Request} request
  * @param {object} config
@@ -333,7 +379,7 @@ async function ProtocolOverWSHandler(request, config) {
   const log = (/** @type {string} */ info, /** @type {undefined} */ event) => {
     console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
   };
-  const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
+  const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
   const readableWebSocketStream = MakeReadableWebSocketStream(webSocket, earlyDataHeader, log);
   let remoteSocketWapper = { value: null };
   let isDns = false;
@@ -521,7 +567,7 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
       if (error) controller.error(error);
       else if (earlyData) controller.enqueue(earlyData);
     },
-    pull(_controller) { },
+    pull(controller) { },
     cancel(reason) {
       log(`ReadableStream was canceled, due to ${reason}`);
       safeCloseWebSocket(webSocketServer);
@@ -675,7 +721,7 @@ function safeCloseWebSocket(socket) {
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
 
-/*
+/**
  * @param {Uint8Array | (string | number)[]} arr
  */
 function unsafeStringify(arr, offset = 0) {
@@ -703,7 +749,7 @@ function unsafeStringify(arr, offset = 0) {
   ).toLowerCase();
 }
 
-/*
+/**
  * @param {Uint8Array} arr
  */
 function stringify(arr, offset = 0) {
