@@ -1,25 +1,49 @@
 import { connect } from 'cloudflare:sockets';
 
-// --- CONFIGURATION ---
+/**
+ * - UUID: To generate your own UUID, visit: https://www.uuidgenerator.net
+ *   You can add multiple UUIDs by separating them with a comma (e.g., 'uuid1, uuid2').
+ * 
+ * - Proxy IP Land: A large, daily-updated repository of tested proxy IPs.
+ *   Find the list here: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
+ * 
+ * - Scamalytics API: The default key is for public use. If you are creating a popular fork,
+ *   it's recommended to get your own free API key from:
+ *   https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
+ */
 const Config = {
+  // Can be a single UUID or multiple UUIDs separated by commas.
+  userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+
+  // An array of proxy addresses. You can add multiple proxies to the list.
+  // Example: ['proxy1.ir:8443', '1.1.1.1:443', 'proxy2.com:2053']
   proxyIPs: ['nima.nscl.ir:443'],
+  
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
     baseUrl: 'https://api12.scamalytics.com/v3/',
   },
+
   socks5: {
     enabled: false,
     relayMode: false,
     address: '',
   },
+
+  /**
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
+   */
   fromEnv(env) {
-    const selectedProxyIP = env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
+    const selectedProxyIP =
+      env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
     const [proxyHost, proxyPort = '443'] = selectedProxyIP.split(':');
+
     return {
-      proxyAddress: selectedProxyIP,
+      userID: env.UUID || this.userID,
       proxyIP: proxyHost,
       proxyPort: proxyPort,
+      proxyAddress: selectedProxyIP,
       scamalytics: {
         username: env.SCAMALYTICS_USERNAME || this.scamalytics.username,
         apiKey: env.SCAMALYTICS_API_KEY || this.scamalytics.apiKey,
@@ -42,7 +66,12 @@ const CONST = {
   WS_READY_STATE_CLOSING: 2,
 };
 
-// --- CORE LOGIC & LINK GENERATION ---
+/**
+ * Generates a random path string for WebSocket connection.
+ * @param {number} length - Length of the random path part.
+ * @param {string} [query] - Optional query string to append (e.g., 'ed=2048').
+ * @returns {string} The generated path.
+ */
 function generateRandomPath(length = 12, query = '') {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -53,13 +82,16 @@ function generateRandomPath(length = 12, query = '') {
 }
 
 const CORE_PRESETS = {
+  // --- Xray cores – Dream ---
   xray: {
-    tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls', fp: 'chrome', alpn: 'http/1.1', extra: {} },
-    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome', extra: {} },
+    tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls',  fp: 'chrome',  alpn: 'http/1.1', extra: {} },
+    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome',                extra: {} },
   },
+
+  // ---Singbox cores – Freedom ---
   sb: {
-    tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
-    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox', extra: CONST.ED_PARAMS },
+    tls: { path: () => generateRandomPath(18), security: 'tls',  fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
+    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox',             extra: CONST.ED_PARAMS },
   },
 };
 
@@ -67,13 +99,23 @@ function makeName(tag, proto) {
   return `${tag}-${proto.toUpperCase()}`;
 }
 
-function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, extra = {}, name }) {
-  const params = new URLSearchParams({ type: 'ws', host, path });
+function createVlessLink({
+  userID, address, port, host, path,
+  security, sni, fp, alpn, extra = {}, name,
+}) {
+  const params = new URLSearchParams({
+    type: 'ws',
+    host,
+    path,
+  });
+
   if (security) params.set('security', security);
-  if (sni) params.set('sni', sni);
-  if (fp) params.set('fp', fp);
-  if (alpn) params.set('alpn', alpn);
+  if (sni)      params.set('sni',      sni);
+  if (fp)       params.set('fp',       fp);
+  if (alpn)     params.set('alpn',     alpn);
+
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
+
   return `vless://${userID}@${address}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
 }
 
@@ -94,188 +136,165 @@ function buildLink({ core, proto, userID, hostName, address, port, tag }) {
   });
 }
 
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const pick = (/** @type {string | any[]} */ arr) => arr[Math.floor(Math.random() * arr.length)];
 
+/**
+ * @param {string} core
+ * @param {any} userID
+ * @param {string} hostName
+ */
 async function handleIpSubscription(core, userID, hostName) {
   const mainDomains = [
     hostName, 'creativecommons.org', 'www.speedtest.net',
-    'sky.rethinkdns.com', 'cf.090227.xyz', 'cdnjs.com', 'zula.ir',
+    'sky.rethinkdns.com', 'cfip.1323123.xyz', 'cfip.xxxxxxxx.tk',
+    'go.inmobi.com', 'singapore.com', 'www.visa.com',
+    'cf.090227.xyz', 'cdnjs.com', 'zula.ir',
   ];
+
   const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
-  const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
+  const httpPorts  = [ 80, 8080, 8880, 2052, 2082, 2086, 2095];
+
   let links = [];
+
   const isPagesDeployment = hostName.endsWith('.pages.dev');
+
   mainDomains.forEach((domain, i) => {
-    links.push(buildLink({ core, proto: 'tls', userID, hostName, address: domain, port: pick(httpsPorts), tag: `D${i + 1}` }));
+    links.push(
+      buildLink({ core, proto: 'tls', userID, hostName, address: domain, port: pick(httpsPorts), tag: `D${i+1}` })
+    );
+
     if (!isPagesDeployment) {
-      links.push(buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts), tag: `D${i + 1}` }));
+      links.push(
+        buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts),  tag: `D${i+1}` })
+      );
     }
   });
+
   try {
     const r = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
     if (r.ok) {
       const json = await r.json();
-      const ips = [...(json.ipv4 || []), ...(json.ipv6 || [])].slice(0, 20).map(x => x.ip);
+      const ips = [...(json.ipv4||[]), ...(json.ipv6||[])].slice(0, 20).map(x => x.ip);
       ips.forEach((ip, i) => {
         const formattedAddress = ip.includes(':') ? `[${ip}]` : ip;
-        links.push(buildLink({ core, proto: 'tls', userID, hostName, address: formattedAddress, port: pick(httpsPorts), tag: `IP${i + 1}` }));
+        links.push(
+          buildLink({ core, proto: 'tls', userID, hostName, address: formattedAddress, port: pick(httpsPorts), tag: `IP${i+1}` })
+        );
+
         if (!isPagesDeployment) {
-          links.push(buildLink({ core, proto: 'tcp', userID, hostName, address: formattedAddress, port: pick(httpPorts), tag: `IP${i + 1}` }));
+          links.push(
+            buildLink({ core, proto: 'tcp', userID, hostName, address: formattedAddress, port: pick(httpPorts),  tag: `IP${i+1}` })
+          );
         }
       });
     }
-  } catch (e) { console.error('Failed to fetch IP list:', e); }
-  return new Response(btoa(links.join('\n')), { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
+  } catch (e) { console.error('Fetch IP list failed', e); }
+
+  return new Response(btoa(links.join('\n')), {
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  });
 }
 
-// --- MAIN FETCH HANDLER ---
 export default {
+  /**
+   * @param {Request<any, CfProperties<any>>} request
+   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
+   * @param {any} ctx
+   */
   async fetch(request, env, ctx) {
-    try {
-      if (!env.DB || !env.KV) return new Response('Service Unavailable: D1 or KV binding is not configured.', { status: 503 });
-      if (!env.ADMIN_KEY) console.error('CRITICAL: ADMIN_KEY secret is not set in environment variables.');
+    const cfg = Config.fromEnv(env);
+    const url = new URL(request.url);
+    
+    const upgradeHeader = request.headers.get('Upgrade');
+    if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+      const requestConfig = {
+        userID: cfg.userID,
+        proxyIP: cfg.proxyIP,
+        proxyPort: cfg.proxyPort,
+        socks5Address: cfg.socks5.address,
+        socks5Relay: cfg.socks5.relayMode,
+        enableSocks: cfg.socks5.enabled,
+        parsedSocks5Address: cfg.socks5.enabled
+          ? socks5AddressParser(cfg.socks5.address)
+          : {},
+      };
 
-      const url = new URL(request.url);
-      const pathname = url.pathname;
-      const cfg = Config.fromEnv(env);
-
-      if (pathname === '/scamalytics-lookup') return handleScamalyticsLookup(request, cfg);
-
-      if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-        const parts = pathname.slice(1).split('/');
-        const userID = parts.length > 1 && parts[0] === 'users' ? parts[1] : parts[0];
-        if (!isValidUUID(userID) || !(await isValidUser(userID, env, ctx))) return new Response('Invalid or expired user.', { status: 403 });
-        const requestConfig = {
-          userID,
-          proxyIP: cfg.proxyIP,
-          proxyPort: cfg.proxyPort,
-          socks5Address: cfg.socks5.address,
-          socks5Relay: cfg.socks5.relayMode,
-          enableSocks: cfg.socks5.enabled,
-          parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
-        };
-        return ProtocolOverWSHandler(request, requestConfig);
-      }
-
-      if (pathname.startsWith('/admin')) return handleAdminRoutes(request, env);
-
-      const parts = pathname.slice(1).split('/');
-      let userID;
-      if (parts[0] === 'users' && parts.length > 1) {
-        userID = parts[1];
-        if (await isValidUser(userID, env, ctx)) {
-          return handleConfigPage(userID, url.hostname, cfg.proxyAddress);
-        }
-      } else if ((parts[0] === 'xray' || parts[0] === 'sb') && parts.length > 1) {
-        userID = parts[1];
-        if (await isValidUser(userID, env, ctx)) {
-          return handleIpSubscription(parts[0], userID, url.hostname);
-        }
-      } else if (parts.length === 1 && isValidUUID(parts[0])) {
-        userID = parts[0];
-        if (await isValidUser(userID, env, ctx)) {
-          return handleConfigPage(userID, url.hostname, cfg.proxyAddress);
-        }
-      }
-
-      return new Response('404 - Not Found: The requested user or path does not exist.', { status: 404 });
-    } catch (err) {
-      console.error('Unhandled Exception:', err.stack);
-      return new Response(`500 - Internal Server Error: ${err.message}`, { status: 500 });
+      return ProtocolOverWSHandler(request, requestConfig);
     }
+    
+    if (url.pathname === '/scamalytics-lookup')
+      return handleScamalyticsLookup(request, cfg);
+
+    if (url.pathname.startsWith(`/xray/${cfg.userID}`))
+      return handleIpSubscription('xray', cfg.userID, url.hostname);
+
+    if (url.pathname.startsWith(`/sb/${cfg.userID}`))
+      return handleIpSubscription('sb', cfg.userID, url.hostname);
+
+    if (url.pathname.startsWith(`/${cfg.userID}`))
+      return handleConfigPage(cfg.userID, url.hostname, cfg.proxyAddress);
+
+    return new Response('UUID not found. Please set the UUID environment variable in the Cloudflare dashboard.', { status: 404 });
   },
 };
 
-// --- HELPERS & UTILITIES ---
-const isValidUUID = (uuid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
-
-async function isValidUser(userID, env, ctx) {
-  if (!isValidUUID(userID)) return false;
-  const cacheKey = `user:${userID}`;
-  const cached = await env.KV.get(cacheKey);
-  if (cached === 'valid') return true;
-  if (cached === 'invalid') return false;
-  try {
-    const now = Math.floor(Date.now() / 1000);
-    const stmt = env.DB.prepare('SELECT expiration_timestamp, status FROM users WHERE id = ?');
-    const user = await stmt.bind(userID).first();
-    if (!user || user.expiration_timestamp < now || user.status !== 'active') {
-      await env.KV.put(cacheKey, 'invalid', { expirationTtl: 3600 });
-      return false;
-    }
-    ctx.waitUntil(env.DB.prepare('UPDATE users SET last_accessed = ? WHERE id = ?').bind(now, userID).run());
-    await env.KV.put(cacheKey, 'valid', { expiration: user.expiration_timestamp });
-    return true;
-  } catch (e) {
-    console.error('D1 query failed in isValidUser:', e);
-    return false;
-  }
-}
-
-async function invalidateUserCache(userID, env) {
-  await env.KV.delete(`user:${userID}`);
-}
-
-// --- ADMIN PANEL API & UI ---
-async function handleAdminRoutes(request, env) {
+/**
+ * Performs Scamalytics IP lookup using API.
+ * @param {Request} request
+ * @param {object} config
+ * @returns {Promise<Response>}
+ */
+async function handleScamalyticsLookup(request, config) {
   const url = new URL(request.url);
-  const path = url.pathname.replace('/admin', '');
-
-  if (request.method === 'GET' && (path === '/login' || path === '/')) {
-    return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  const ipToLookup = url.searchParams.get('ip');
+  if (!ipToLookup) {
+    return new Response(JSON.stringify({ error: 'Missing IP parameter' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
-  if (request.method === 'GET' && path === '/dashboard') {
-    return new Response(getAdminDashboardHTML(), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  const { username, apiKey, baseUrl } = config.scamalytics;
+  if (!username || !apiKey) {
+    return new Response(JSON.stringify({ error: 'Scamalytics API credentials not configured.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
-  const authKey = request.headers.get('Authorization');
-  if (authKey !== env.ADMIN_KEY) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
 
-  // Protected API Routes
   try {
-    if (request.method === 'POST' && path === '/api/users') {
-      const body = await request.json();
-      const { id, expiration_date, expiration_time, notes = '' } = body;
-      if (!id || !expiration_date || !expiration_time || !isValidUUID(id)) {
-        return Response.json({ error: 'Missing or invalid parameters' }, { status: 400 });
-      }
-      const expirationTimestamp = Math.floor(new Date(`${expiration_date}T${expiration_time}:00Z`).getTime() / 1000);
-      const now = Math.floor(Date.now() / 1000);
-      await env.DB.prepare('INSERT INTO users (id, expiration_timestamp, created_at, last_accessed, status, notes) VALUES (?, ?, ?, ?, ?, ?)')
-        .bind(id, expirationTimestamp, now, now, 'active', notes || null).run();
-      await invalidateUserCache(id, env);
-      return Response.json({ success: true });
-    }
-
-    if (request.method === 'GET' && path === '/api/users') {
-      const { results } = await env.DB.prepare('SELECT * FROM users ORDER BY created_at DESC').all();
-      return Response.json(results);
-    }
-
-    if (request.method === 'DELETE' && path.startsWith('/api/users/')) {
-      const id = path.substring('/api/users/'.length);
-      if (!isValidUUID(id)) return Response.json({ error: 'Invalid UUID format' }, { status: 400 });
-      await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
-      await invalidateUserCache(id, env);
-      return Response.json({ success: true });
-    }
-  } catch (e) {
-    console.error('Admin API Error:', e);
-    return Response.json({ error: 'An internal server error occurred' }, { status: 500 });
+    const scamalyticsResponse = await fetch(scamalyticsUrl);
+    const responseBody = await scamalyticsResponse.json();
+    return new Response(JSON.stringify(responseBody), { headers });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.toString() }), {
+      status: 500,
+      headers,
+    });
   }
-
-  return new Response('Admin endpoint not found', { status: 404 });
 }
 
-// --- HTML PAGE GENERATION ---
+/**
+ * @param {any} userID
+ * @param {string} hostName
+ * @param {string} proxyAddress
+ */
 function handleConfigPage(userID, hostName, proxyAddress) {
   const html = generateBeautifulConfigPage(userID, hostName, proxyAddress);
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
+/**
+ * @param {any} userID
+ * @param {string} hostName
+ * @param {string} proxyAddress
+ */
 function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   const dream = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
@@ -283,14 +302,14 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   });
 
   const freedom = buildLink({
-    core: 'sb', proto: 'tls', userID, hostName,
+    core: 'sb',   proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Singbox`,
   });
-
+  
   const configs = { dream, freedom };
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
-  const subSbUrl = `https://${hostName}/sb/${userID}`;
-
+  const subSbUrl   = `https://${hostName}/sb/${userID}`;
+  
   const clientUrls = {
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
     hiddify: `hiddify://install-config?url=${encodeURIComponent(subXrayUrl)}`,
@@ -320,51 +339,13 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   return finalHTML;
 }
 
-function getAdminLoginHTML() {
-  return `<!DOCTYPE html><html><head><title>Admin Login</title><style>body{display:flex;justify-content:center;align-items:center;height:100vh;background:#1a1a1a;font-family:sans-serif;margin:0;}div{padding:2rem;background:#2a2a2a;border-radius:8px;color:white;text-align:center;}input,button{width:100%;padding:10px;margin-top:10px;border-radius:5px;border:1px solid #444;background:#333;color:white;box-sizing:border-box;}button{cursor:pointer;background:#007bff;}p{color:red;}</style></head><body><div><h2>Admin Login</h2><input type="password" id="admin-key" placeholder="Enter Admin Key"><button onclick="login()">Login</button><p id="error-message"></p></div><script>
-    async function login() {
-        const key = document.getElementById('admin-key').value;
-        const errorP = document.getElementById('error-message');
-        errorP.textContent = '';
-        if (!key) {
-            errorP.textContent = 'Key cannot be empty.';
-            return;
-        }
-        try {
-            const response = await fetch('/admin/api/users', {
-                headers: { 'Authorization': key }
-            });
-            if (response.ok) {
-                localStorage.setItem('admin_key', key);
-                window.location.href = '/admin/dashboard';
-            } else if (response.status === 401) {
-                errorP.textContent = 'Invalid Key. Access Denied.';
-            } else {
-                errorP.textContent = 'An unknown error occurred.';
-            }
-        } catch (err) {
-            errorP.textContent = 'Failed to connect to the server.';
-        }
-    }
-    document.getElementById('admin-key').addEventListener('keyup', (event) => { if (event.key === 'Enter') login(); });
-  </script></body></html>`;
-}
-
-function getAdminDashboardHTML() {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Admin Dashboard</title><style>body{background:#1a1a1a;font-family:sans-serif;color:#fff;padding:20px;}.dashboard{max-width:900px;margin:auto;background:#2a2a2a;border-radius:15px;padding:20px;}h1,h2{text-align:center;}.create-section{background:#333;padding:15px;border-radius:10px;margin-bottom:20px;}input,button{padding:8px;margin:5px;border:none;border-radius:5px;background:#444;color:#fff;}button{background:#007bff;cursor:pointer;}table{width:100%;border-collapse:collapse;}th,td{padding:10px;text-align:left;border-bottom:1px solid #444;word-break:break-all;}.expired{color:#ff5252;}</style></head><body><div class="dashboard"><h1>Admin Dashboard</h1><div class="create-section"><h2>Create User</h2><input type="text" id="new-id" placeholder="User ID (UUID)"><button onclick="generateUUID()">Generate</button><input type="date" id="exp-date"><input type="time" id="exp-time"><input type="text" id="notes" placeholder="Notes"><button onclick="createUser()">Create</button></div><div class="user-list"><h2>User List</h2><table id="user-table"><thead><tr><th>ID</th><th>Expiry</th><th>Created</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody></tbody></table></div></div><script>
-    const adminKey = localStorage.getItem('admin_key');
-    if (!adminKey) window.location.href = '/admin/login';
-    const apiHeaders = { 'Content-Type': 'application/json', 'Authorization': adminKey };
-    async function apiFetch(endpoint, options={}){const res=await fetch('/admin/api'+endpoint,{...options,headers:apiHeaders});if(res.status===401){alert('Unauthorized!');window.location.href='/admin/login';}return res;}
-    function generateUUID(){document.getElementById('new-id').value=crypto.randomUUID();}
-    async function createUser(){const id=document.getElementById('new-id').value;const date=document.getElementById('exp-date').value;const time=document.getElementById('exp-time').value;const notes=document.getElementById('notes').value;if(!id||!date||!time)return alert('Fill required fields.');const res=await apiFetch('/users',{method:'POST',body:JSON.stringify({id,expiration_date:date,expiration_time:time,notes})});if(res.ok){alert('User created!');loadUsers();}else{alert('Error!');}}
-    async function loadUsers(){const res=await apiFetch('/users');const users=await res.json();const tbody=document.getElementById('user-table').querySelector('tbody');tbody.innerHTML='';const now=Date.now()/1000;users.forEach(u=>{const expiry=new Date(u.expiration_timestamp*1000).toLocaleString();const created=new Date(u.created_at*1000).toLocaleDateString();const statusClass=u.expiration_timestamp>now&&u.status==='active'?'':'expired';tbody.innerHTML+=\`<tr><td>\${u.id}</td><td class="\${statusClass}">\${expiry}</td><td>\${created}</td><td class="\${statusClass}">\${u.status}</td><td>\${u.notes||''}</td><td><button onclick="deleteUser('\${u.id}')">Delete</button></td></tr>\`;});}
-    async function deleteUser(id){if(!confirm('Delete user?'))return;const res=await apiFetch(\`/users/\${id}\`,{method:'DELETE'});if(res.ok){alert('User deleted!');loadUsers();}else{alert('Error!');}}
-    window.onload=()=>{generateUUID();loadUsers();};
-  </script></body></html>`;
-}
-
-// --- VLESS PROTOCOL HANDLERS ---
+/**
+ * Core vless protocol logic
+ * Handles VLESS protocol over WebSocket.
+ * @param {Request} request
+ * @param {object} config
+ * @returns {Promise<Response>}
+ */
 async function ProtocolOverWSHandler(request, config) {
   const webSocketPair = new WebSocketPair();
   const [client, webSocket] = Object.values(webSocketPair);
@@ -372,12 +353,14 @@ async function ProtocolOverWSHandler(request, config) {
   let address = '';
   let portWithRandomLog = '';
   let udpStreamWriter = null;
-  const log = (info, event) => {
+  const log = (/** @type {string} */ info, /** @type {undefined} */ event) => {
     console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
   };
   const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
   const readableWebSocketStream = MakeReadableWebSocketStream(webSocket, earlyDataHeader, log);
   let remoteSocketWapper = { value: null };
+  let isDns = false;
+
   readableWebSocketStream
     .pipeTo(
       new WritableStream({
@@ -385,12 +368,14 @@ async function ProtocolOverWSHandler(request, config) {
           if (udpStreamWriter) {
             return udpStreamWriter.write(chunk);
           }
+
           if (remoteSocketWapper.value) {
             const writer = remoteSocketWapper.value.writable.getWriter();
             await writer.write(chunk);
             writer.releaseLock();
             return;
           }
+
           const {
             hasError,
             message,
@@ -401,13 +386,17 @@ async function ProtocolOverWSHandler(request, config) {
             ProtocolVersion = new Uint8Array([0, 0]),
             isUDP,
           } = ProcessProtocolHeader(chunk, config.userID);
+
           address = addressRemote;
           portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'} `;
+
           if (hasError) {
             throw new Error(message);
           }
+
           const vlessResponseHeader = new Uint8Array([ProtocolVersion[0], 0]);
           const rawClientData = chunk.slice(rawDataIndex);
+
           if (isUDP) {
             if (portRemote === 53) {
               const dnsPipeline = await createDnsPipeline(webSocket, vlessResponseHeader, log);
@@ -418,6 +407,7 @@ async function ProtocolOverWSHandler(request, config) {
             }
             return;
           }
+
           HandleTCPOutBound(
             remoteSocketWapper,
             addressType,
@@ -441,59 +431,60 @@ async function ProtocolOverWSHandler(request, config) {
     .catch(err => {
       console.error('Pipeline failed:', err.stack || err);
     });
+
   return new Response(null, { status: 101, webSocket: client });
 }
 
-function ProcessProtocolHeader(protocolBuffer, userID) {
-  if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
-  const dataView = new DataView(protocolBuffer);
-  const version = dataView.getUint8(0);
-  const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
-  const uuids = userID.split(',').map(id => id.trim());
-  const isValidUser = uuids.some(uuid => slicedBufferString === uuid);
-  if (!isValidUser) return { hasError: true, message: 'invalid user' };
-  const optLength = dataView.getUint8(17);
-  const command = dataView.getUint8(18 + optLength);
-  if (command !== 1 && command !== 2) return { hasError: true, message: `command ${command} is not supported` };
-  const portIndex = 18 + optLength + 1;
-  const portRemote = dataView.getUint16(portIndex);
-  const addressType = dataView.getUint8(portIndex + 2);
-  let addressValue, addressLength, addressValueIndex;
-  switch (addressType) {
-    case 1:
-      addressLength = 4;
-      addressValueIndex = portIndex + 3;
-      addressValue = new Uint8Array(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join('.');
-      break;
-    case 2:
-      addressLength = dataView.getUint8(portIndex + 3);
-      addressValueIndex = portIndex + 4;
-      addressValue = new TextDecoder().decode(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
-      break;
-    case 3:
-      addressLength = 16;
-      addressValueIndex = portIndex + 3;
-      addressValue = Array.from({ length: 8 }, (_, i) => dataView.getUint16(addressValueIndex + i * 2).toString(16)).join(':');
-      break;
-    default:
-      return { hasError: true, message: `invalid addressType: ${addressType}` };
-  }
-  if (!addressValue) return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
-  return {
-    hasError: false,
-    addressRemote: addressValue,
-    addressType,
-    portRemote,
-    rawDataIndex: addressValueIndex + addressLength,
-    ProtocolVersion: new Uint8Array([version]),
-    isUDP: command === 2,
-  };
+/**
+ * @param {string} uuid
+ */
+function isValidUUID(uuid) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
 }
 
-async function HandleTCPOutBound(remoteSocket, addressType, addressRemote, portRemote, rawClientData, webSocket, protocolResponseHeader, log, config) {
+/**
+ * Handles TCP outbound logic for VLESS.
+ * @param {{ value: any; }} remoteSocket
+ * @param {number} addressType
+ * @param {string} addressRemote
+ * @param {number} portRemote
+ * @param {any} rawClientData
+ * @param {WebSocket} webSocket
+ * @param {Uint8Array} protocolResponseHeader
+ * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
+ * @param {{ socks5Relay: any; parsedSocks5Address: any; enableSocks: any; proxyIP: any; proxyPort: any; userID?: string; socks5Address?: string; }} config
+ */
+async function HandleTCPOutBound(
+  remoteSocket,
+  addressType,
+  addressRemote,
+  portRemote,
+  rawClientData,
+  webSocket,
+  protocolResponseHeader,
+  log,
+  config,
+) {
+  if (!config) {
+    config = {
+      userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+      socks5Address: '',
+      socks5Relay: false,
+      proxyIP: 'nima.nscl.ir',
+      proxyPort: '443',
+      enableSocks: false,
+      parsedSocks5Address: {},
+    };
+  }
+
+  /**
+   * @param {string} address
+   * @param {number} port
+   */
   async function connectAndWrite(address, port, socks = false) {
     let tcpSocket;
-    if (config.socks5.relayMode) {
+    if (config.socks5Relay) {
       tcpSocket = await socks5Connect(addressType, address, port, log, config.parsedSocks5Address);
     } else {
       tcpSocket = socks
@@ -507,26 +498,45 @@ async function HandleTCPOutBound(remoteSocket, addressType, addressRemote, portR
     writer.releaseLock();
     return tcpSocket;
   }
+
   async function retry() {
     const tcpSocket = config.enableSocks
       ? await connectAndWrite(addressRemote, portRemote, true)
-      : await connectAndWrite(config.proxyIP || addressRemote, config.proxyPort || portRemote, false);
-    tcpSocket.closed.catch(error => console.log('retry tcpSocket closed error', error)).finally(() => safeCloseWebSocket(webSocket));
+      : await connectAndWrite(
+        config.proxyIP || addressRemote,
+        config.proxyPort || portRemote,
+        false,
+      );
+
+    tcpSocket.closed
+      .catch(error => {
+        console.log('retry tcpSocket closed error', error);
+      })
+      .finally(() => {
+        safeCloseWebSocket(webSocket);
+      });
     RemoteSocketToWS(tcpSocket, webSocket, protocolResponseHeader, null, log);
   }
+
   const tcpSocket = await connectAndWrite(addressRemote, portRemote);
   RemoteSocketToWS(tcpSocket, webSocket, protocolResponseHeader, retry, log);
 }
 
+/**
+ * Converts WebSocket messages to a readable stream.
+ * @param {WebSocket} webSocketServer
+ * @param {string} earlyDataHeader
+ * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
+ */
 function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   return new ReadableStream({
     start(controller) {
-      webSocketServer.addEventListener('message', event => controller.enqueue(event.data));
+      webSocketServer.addEventListener('message', (/** @type {{ data: any; }} */ event) => controller.enqueue(event.data));
       webSocketServer.addEventListener('close', () => {
         safeCloseWebSocket(webSocketServer);
         controller.close();
       });
-      webSocketServer.addEventListener('error', err => {
+      webSocketServer.addEventListener('error', (/** @type {any} */ err) => {
         log('webSocketServer has error');
         controller.error(err);
       });
@@ -534,7 +544,7 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
       if (error) controller.error(error);
       else if (earlyData) controller.enqueue(earlyData);
     },
-    pull() {},
+    pull(_controller) { },
     cancel(reason) {
       log(`ReadableStream was canceled, due to ${reason}`);
       safeCloseWebSocket(webSocketServer);
@@ -542,15 +552,93 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   });
 }
 
+
+/**
+ * Parses and validates VLESS protocol header.
+ * @param {ArrayBufferLike & { BYTES_PER_ELEMENT?: never; }} protocolBuffer
+ * @param {string} userID
+ */
+function ProcessProtocolHeader(protocolBuffer, userID) {
+  if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
+
+  const dataView = new DataView(protocolBuffer);
+  const version = dataView.getUint8(0);
+  const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
+  const uuids = userID.split(',').map((/** @type {string} */ id) => id.trim());
+  const isValidUser = uuids.some((/** @type {string} */ uuid) => slicedBufferString === uuid);
+
+  if (!isValidUser) return { hasError: true, message: 'invalid user' };
+
+  const optLength = dataView.getUint8(17);
+  const command = dataView.getUint8(18 + optLength);
+  if (command !== 1 && command !== 2)
+    return { hasError: true, message: `command ${command} is not supported` };
+
+  const portIndex = 18 + optLength + 1;
+  const portRemote = dataView.getUint16(portIndex);
+  const addressType = dataView.getUint8(portIndex + 2);
+  let addressValue, addressLength, addressValueIndex;
+
+  switch (addressType) {
+    case 1: // IPv4
+      addressLength = 4;
+      addressValueIndex = portIndex + 3;
+      addressValue = new Uint8Array(
+        protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength),
+      ).join('.');
+      break;
+    case 2: // Domain
+      addressLength = dataView.getUint8(portIndex + 3);
+      addressValueIndex = portIndex + 4;
+      addressValue = new TextDecoder().decode(
+        protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength),
+      );
+      break;
+    case 3: // IPv6
+      addressLength = 16;
+      addressValueIndex = portIndex + 3;
+      addressValue = Array.from({ length: 8 }, (_, i) =>
+        dataView.getUint16(addressValueIndex + i * 2).toString(16),
+      ).join(':');
+      break;
+    default:
+      return { hasError: true, message: `invalid addressType: ${addressType}` };
+  }
+
+  if (!addressValue)
+    return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
+
+  return {
+    hasError: false,
+    addressRemote: addressValue,
+    addressType,
+    portRemote,
+    rawDataIndex: addressValueIndex + addressLength,
+    ProtocolVersion: new Uint8Array([version]),
+    isUDP: command === 2,
+  };
+}
+
+/**
+ * Pipes remote socket data to WebSocket.
+ * @param {Socket} remoteSocket
+ * @param {WebSocket} webSocket
+ * @param {string | Uint8Array | ArrayBuffer | ArrayBufferView | Blob} protocolResponseHeader
+ * @param {{ (): Promise<void>; (): any; }} retry
+ * @param {{ (info: any, event: any): void; (arg0: string): void; (info: any, event: any): void; (arg0: string): void; (arg0: string): void; }} log
+ */
 async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
   let hasIncomingData = false;
   try {
     await remoteSocket.readable.pipeTo(
       new WritableStream({
         async write(chunk) {
-          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN) throw new Error('WebSocket is not open');
+          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN)
+            throw new Error('WebSocket is not open');
           hasIncomingData = true;
-          const dataToSend = protocolResponseHeader ? await new Blob([protocolResponseHeader, chunk]).arrayBuffer() : chunk;
+          const dataToSend = protocolResponseHeader
+            ? await new Blob([protocolResponseHeader, chunk]).arrayBuffer()
+            : chunk;
           webSocket.send(dataToSend);
           protocolResponseHeader = null;
         },
@@ -572,6 +660,10 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
   }
 }
 
+/**
+ * decodes base64 string to ArrayBuffer.
+ * @param {string} base64Str
+ */
 function base64ToArrayBuffer(base64Str) {
   if (!base64Str) return { earlyData: null, error: null };
   try {
@@ -587,9 +679,16 @@ function base64ToArrayBuffer(base64Str) {
   }
 }
 
+/**
+ * Safely closes a WebSocket connection.
+ * @param {{ readyState: number; close: () => void; }} socket
+ */
 function safeCloseWebSocket(socket) {
   try {
-    if (socket.readyState === CONST.WS_READY_STATE_OPEN || socket.readyState === CONST.WS_READY_STATE_CLOSING) {
+    if (
+      socket.readyState === CONST.WS_READY_STATE_OPEN ||
+      socket.readyState === CONST.WS_READY_STATE_CLOSING
+    ) {
       socket.close();
     }
   } catch (error) {
@@ -599,27 +698,56 @@ function safeCloseWebSocket(socket) {
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
 
+/*
+ * @param {Uint8Array | (string | number)[]} arr
+ */
 function unsafeStringify(arr, offset = 0) {
   return (
-    byteToHex[arr[offset]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + '-' +
-    byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + '-' +
-    byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + '-' +
-    byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + '-' +
-    byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]
+    byteToHex[arr[offset]] +
+    byteToHex[arr[offset + 1]] +
+    byteToHex[arr[offset + 2]] +
+    byteToHex[arr[offset + 3]] +
+    '-' +
+    byteToHex[arr[offset + 4]] +
+    byteToHex[arr[offset + 5]] +
+    '-' +
+    byteToHex[arr[offset + 6]] +
+    byteToHex[arr[offset + 7]] +
+    '-' +
+    byteToHex[arr[offset + 8]] +
+    byteToHex[arr[offset + 9]] +
+    '-' +
+    byteToHex[arr[offset + 10]] +
+    byteToHex[arr[offset + 11]] +
+    byteToHex[arr[offset + 12]] +
+    byteToHex[arr[offset + 13]] +
+    byteToHex[arr[offset + 14]] +
+    byteToHex[arr[offset + 15]]
   ).toLowerCase();
 }
 
+/*
+ * @param {Uint8Array} arr
+ */
 function stringify(arr, offset = 0) {
   const uuid = unsafeStringify(arr, offset);
   if (!isValidUUID(uuid)) throw new TypeError('Stringified UUID is invalid');
   return uuid;
 }
 
+/**
+ * DNS pipeline for UDP DNS requests, using DNS-over-HTTPS, (REvil Method).
+ * @param {WebSocket} webSocket
+ * @param {Uint8Array} vlessResponseHeader
+ * @param {Function} log
+ * @returns {Promise<{write: Function}>}
+ */
 async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
   let isHeaderSent = false;
   const transformStream = new TransformStream({
     transform(chunk, controller) {
-      for (let index = 0; index < chunk.byteLength; ) {
+      // Parse UDP packets from VLESS framing
+      for (let index = 0; index < chunk.byteLength;) {
         const lengthBuffer = chunk.slice(index, index + 2);
         const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
         const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPacketLength));
@@ -628,75 +756,129 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
       }
     },
   });
-  transformStream.readable.pipeTo(
-    new WritableStream({
-      async write(chunk) {
-        try {
-          const resp = await fetch(`https://1.1.1.1/dns-query`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/dns-message' },
-            body: chunk,
-          });
-          const dnsQueryResult = await resp.arrayBuffer();
-          const udpSize = dnsQueryResult.byteLength;
-          const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
-          if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
-            log(`DNS query successful, length: ${udpSize}`);
-            if (isHeaderSent) {
-              webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-            } else {
-              webSocket.send(await new Blob([vlessResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
-              isHeaderSent = true;
+
+  transformStream.readable
+    .pipeTo(
+      new WritableStream({
+        async write(chunk) {
+          try {
+            // Send DNS query using DoH
+            const resp = await fetch(`https://1.1.1.1/dns-query`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/dns-message' },
+              body: chunk,
+            });
+            const dnsQueryResult = await resp.arrayBuffer();
+            const udpSize = dnsQueryResult.byteLength;
+            const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
+
+            if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
+              log(`DNS query successful, length: ${udpSize}`);
+              if (isHeaderSent) {
+                webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+              } else {
+                webSocket.send(
+                  await new Blob([
+                    vlessResponseHeader,
+                    udpSizeBuffer,
+                    dnsQueryResult,
+                  ]).arrayBuffer(),
+                );
+                isHeaderSent = true;
+              }
             }
+          } catch (error) {
+            log('DNS query error: ' + error);
           }
-        } catch (error) {
-          log('DNS query error: ' + error);
-        }
-      },
-    }),
-  ).catch(e => log('DNS stream error: ' + e));
+        },
+      }),
+    )
+    .catch(e => {
+      log('DNS stream error: ' + e);
+    });
+
   const writer = transformStream.writable.getWriter();
-  return { write: chunk => writer.write(chunk) };
+  return {
+    write: (/** @type {any} */ chunk) => writer.write(chunk),
+  };
 }
 
+/**
+ * SOCKS5 TCP connection logic.
+ * @param {any} addressType
+ * @param {string} addressRemote
+ * @param {number} portRemote
+ * @param {any} log
+ * @param {{ username: any; password: any; hostname: any; port: any; }} parsedSocks5Addr
+ */
 async function socks5Connect(addressType, addressRemote, portRemote, log, parsedSocks5Addr) {
   const { username, password, hostname, port } = parsedSocks5Addr;
   const socket = connect({ hostname, port });
   const writer = socket.writable.getWriter();
   const reader = socket.readable.getReader();
   const encoder = new TextEncoder();
-  await writer.write(new Uint8Array([5, 2, 0, 2]));
+
+  await writer.write(new Uint8Array([5, 2, 0, 2])); // SOCKS5 greeting
   let res = (await reader.read()).value;
   if (res[0] !== 0x05 || res[1] === 0xff) throw new Error('SOCKS5 server connection failed.');
+
   if (res[1] === 0x02) {
+    // Auth required
     if (!username || !password) throw new Error('SOCKS5 auth credentials not provided.');
-    const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
+    const authRequest = new Uint8Array([
+      1,
+      username.length,
+      ...encoder.encode(username),
+      password.length,
+      ...encoder.encode(password),
+    ]);
     await writer.write(authRequest);
     res = (await reader.read()).value;
     if (res[0] !== 0x01 || res[1] !== 0x00) throw new Error('SOCKS5 authentication failed.');
   }
+
   let DSTADDR;
   switch (addressType) {
-    case 1: DSTADDR = new Uint8Array([1, ...addressRemote.split('.').map(Number)]); break;
-    case 2: DSTADDR = new Uint8Array([3, addressRemote.length, ...encoder.encode(addressRemote)]); break;
-    case 3: DSTADDR = new Uint8Array([4, ...addressRemote.split(':').flatMap(x => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)])]); break;
-    default: throw new Error(`Invalid addressType for SOCKS5: ${addressType}`);
+    case 1:
+      DSTADDR = new Uint8Array([1, ...addressRemote.split('.').map(Number)]);
+      break;
+    case 2:
+      DSTADDR = new Uint8Array([3, addressRemote.length, ...encoder.encode(addressRemote)]);
+      break;
+    case 3:
+      DSTADDR = new Uint8Array([
+        4,
+        ...addressRemote
+          .split(':')
+          .flatMap((/** @type {string} */ x) => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)]),
+      ]);
+      break;
+    default:
+      throw new Error(`Invalid addressType for SOCKS5: ${addressType}`);
   }
+
   const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
   await writer.write(socksRequest);
   res = (await reader.read()).value;
   if (res[1] !== 0x00) throw new Error('Failed to open SOCKS5 connection.');
+
   writer.releaseLock();
   reader.releaseLock();
   return socket;
 }
 
+/**
+ * Parses SOCKS5 address string.
+ * @param {string} address
+ * @returns {object}
+ */
 function socks5AddressParser(address) {
   try {
     const [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
     const [hostname, portStr] = hostPart.split(':');
     const port = parseInt(portStr, 10);
     if (!hostname || isNaN(port)) throw new Error();
+
     let username, password;
     if (authPart) {
       [username, password] = authPart.split(':');
@@ -708,39 +890,9 @@ function socks5AddressParser(address) {
   }
 }
 
-async function handleScamalyticsLookup(request, config) {
-  const url = new URL(request.url);
-  const ipToLookup = url.searchParams.get('ip');
-  if (!ipToLookup) {
-    return new Response(JSON.stringify({ error: 'Missing IP parameter' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  const { username, apiKey, baseUrl } = config.scamalytics;
-  if (!username || !apiKey) {
-    return new Response(JSON.stringify({ error: 'Scamalytics API credentials not configured.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  });
-  try {
-    const scamalyticsResponse = await fetch(scamalyticsUrl);
-    const responseBody = await scamalyticsResponse.json();
-    const dbipResponse = await fetch(`https://api.db-ip.com/v2/free/${ipToLookup}`);
-    const dbip = await dbipResponse.json();
-    return new Response(JSON.stringify({ scamalytics: responseBody, external_datasources: { dbip } }), { headers });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.toString() }), { status: 500, headers });
-  }
-}
-
-// --- PAGE ASSETS ---
+/**
+ * @returns {string} CSS content of the page.
+ */
 function getPageCSS() {
   return `
       * {
@@ -922,7 +1074,8 @@ function getPageCSS() {
 	      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
 	      .ip-info-section { padding: 14px; gap: 16px; }
 	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
+	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; }
+	      .ip-info-content { gap: 6px; } .ip-info-header svg { width: 18px; height: 18px; }
 	      .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
 	      .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
 	      .config-card { padding: 10px; } .config-title { font-size: 16px; }
@@ -954,6 +1107,11 @@ function getPageCSS() {
   `;
 }
 
+/**
+ * @param {object} configs - Object containing configuration links.
+ * @param {object} clientUrls - Object containing client URLs.
+ * @returns {string} The HTML body content of the page.
+ */
 function getPageHTML(configs, clientUrls) {
   return `
     <div class="container">
@@ -1042,7 +1200,7 @@ function getPageHTML(configs, clientUrls) {
           </a>
           <a href="${clientUrls.exclave}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
-            <span class="button-text">Import to Exclave</span>
+            <span class="button-text">Import to Exclavex</span>
           </a>
         </div>
       </div>
@@ -1055,6 +1213,11 @@ function getPageHTML(configs, clientUrls) {
   `;
 }
 
+/**
+ * @returns {string} Client-side JavaScript
+ * This function is self-contained and doesn't need template literals from the server.
+ * Using a template literal here is just for multi-line string formatting.
+ */
 function getPageScript() {
   return `
       function copyToClipboard(button, text) {
@@ -1117,19 +1280,19 @@ function getPageScript() {
         };
         if (elements.ip) elements.ip.textContent = sa.ip || "N/A";
         if (elements.location) {
-          const city = dbip?.cityName || '';
-          const countryName = dbip?.countryName || '';
-          const countryCode = dbip?.countryCode ? dbip.countryCode.toLowerCase() : '';
+          const city = dbip?.ip_city || '';
+          const countryName = dbip?.ip_country_name || '';
+          const countryCode = dbip?.ip_country_code ? dbip.ip_country_code.toLowerCase() : '';
           let locationString = 'N/A';
-          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${dbip.countryCode}" class="country-flag"> \` : '';
+          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${dbip.ip_country_code}" class="country-flag"> \` : '';
           let textPart = [city, countryName].filter(Boolean).join(', ');
           if (flagElementHtml || textPart) locationString = \`\${flagElementHtml}\${textPart}\`.trim();
           elements.location.innerHTML = locationString || "N/A";
         }
-        if (elements.isp) elements.isp.textContent = sa.isp || dbip?.isp || "N/A";
+        if (elements.isp) elements.isp.textContent = sa.scamalytics_isp || dbip?.isp_name || "N/A";
         if (elements.proxy) {
-          const score = sa.score;
-          const risk = sa.risk;
+          const score = sa.scamalytics_score;
+          const risk = sa.scamalytics_risk;
           let riskText = "Unknown";
           let badgeClass = "badge-neutral";
           if (risk && score !== undefined) {
@@ -1157,14 +1320,14 @@ function getPageScript() {
         }
         if (elements.ip) elements.ip.textContent = geo.ip || "N/A";
         if (elements.location) {
-          const city = geo.city_name || '';
+          const city = geo.city || '';
           const countryName = geo.country_name || '';
           const countryCode = geo.country_code ? geo.country_code.toLowerCase() : '';
           let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${geo.country_code}" class="country-flag"> \` : '';
           let textPart = [city, countryName].filter(Boolean).join(', ');
           elements.location.innerHTML = (flagElementHtml || textPart) ? \`\${flagElementHtml}\${textPart}\`.trim() : "N/A";
         }
-        if (elements.isp) elements.isp.textContent = geo.isp || geo.org || geo.asn_name || geo.asn || 'N/A';
+        if (elements.isp) elements.isp.textContent = geo.isp || geo.organisation || geo.as_name || geo.as || 'N/A';
       }
 
       async function fetchIpApiIoInfo(ip) {
