@@ -1,21 +1,17 @@
-//
-// -----------------------------------------------------
-// 🚀 VLESS Proxy Worker - Enhanced & Optimized Script 🚀
-// -----------------------------------------------------
-// This script includes an intelligent, server-side rendered
-// network information panel for maximum speed and reliability.
-//
-
 import { connect } from 'cloudflare:sockets';
 
 // --- CONFIGURATION ---
 const Config = {
-  // Fallback/Relay server if PROXYIP environment variable is not set
   proxyIPs: ['nima.nscl.ir:443'],
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
     baseUrl: 'https://api12.scamalytics.com/v3/',
+  },
+  socks5: {
+    enabled: false,
+    relayMode: false,
+    address: '',
   },
   fromEnv(env) {
     const selectedProxyIP = env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
@@ -23,362 +19,28 @@ const Config = {
     return {
       proxyAddress: selectedProxyIP,
       proxyIP: proxyHost,
-      proxyPort: parseInt(proxyPort, 10),
+      proxyPort: proxyPort,
       scamalytics: {
         username: env.SCAMALYTICS_USERNAME || this.scamalytics.username,
         apiKey: env.SCAMALYTICS_API_KEY || this.scamalytics.apiKey,
         baseUrl: env.SCAMALYTICS_BASEURL || this.scamalytics.baseUrl,
+      },
+      socks5: {
+        enabled: !!env.SOCKS5,
+        relayMode: env.SOCKS5_RELAY === 'true' || this.socks5.relayMode,
+        address: env.SOCKS5 || this.socks5.address,
       },
     };
   },
 };
 
 const CONST = {
+  ED_PARAMS: { ed: 2560, eh: 'Sec-WebSocket-Protocol' },
+  AT_SYMBOL: '@',
+  VLESS_PROTOCOL: 'vless',
   WS_READY_STATE_OPEN: 1,
   WS_READY_STATE_CLOSING: 2,
 };
-
-// --- MAIN FETCH HANDLER ---
-export default {
-  async fetch(request, env, ctx) {
-    try {
-      if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
-        return handleWebSocket(request, env, ctx);
-      }
-      const url = new URL(request.url);
-      const cfg = Config.fromEnv(env);
-
-      // --- SMART API ENDPOINT FOR NETWORK INFO ---
-      if (url.pathname === '/api/network-info') {
-        return handleNetworkInfo(request, cfg);
-      }
-
-      // --- HTTP routes for Admin Panel, Subscriptions, etc. ---
-      if (!env.DB || !env.KV) return new Response('Service Unavailable: D1 or KV binding is not configured.', { status: 503 });
-      if (!env.ADMIN_KEY) console.error('CRITICAL: ADMIN_KEY secret is not set in environment variables.');
-      
-      if (url.pathname.startsWith('/admin')) return handleAdminRoutes(request, env);
-      
-      const parts = url.pathname.slice(1).split('/');
-      let userID;
-      if ((parts[0] === 'xray' || parts[0] === 'sb') && parts.length > 1) {
-        userID = parts[1];
-        if (await isValidUser(userID, env, ctx)) return handleIpSubscription(parts[0], userID, url.hostname);
-      } else if (parts.length === 1 && isValidUUID(parts[0])) {
-        userID = parts[0];
-      }
-      
-      if (userID && await isValidUser(userID, env, ctx)) {
-        return handleConfigPage(userID, url.hostname, cfg.proxyAddress);
-      }
-      
-      return new Response('404 Not Found. Please use your unique user ID in the URL.', { status: 404 });
-    } catch (err) {
-      console.error('Unhandled Exception:', err);
-      return new Response('Internal Server Error', { status: 500 });
-    }
-  },
-};
-
-// --- NEW SMART API ENDPOINT FOR NETWORK INFO ---
-async function handleNetworkInfo(request, config) {
-    const clientIp = request.headers.get('CF-Connecting-IP');
-    const proxyHost = config.proxyIP;
-
-    // Helper to fetch IP details from a reliable provider
-    const getIpDetails = async (ip) => {
-        if (!ip) return null;
-        try {
-            // Using a reliable and free IP geolocation service
-            const response = await fetch(`https://ipinfo.io/${ip}/json`);
-            if (!response.ok) throw new Error(`ipinfo.io status: ${response.status}`);
-            const data = await response.json();
-            return {
-                ip: data.ip,
-                city: data.city,
-                country: data.country, // ipinfo provides country code
-                isp: data.org,
-            };
-        } catch (error) {
-            console.error(`Failed to fetch details for IP ${ip}:`, error);
-            return { ip }; // Return at least the IP on failure
-        }
-    };
-
-    // Helper to get Scamalytics data for risk assessment
-    const getScamalyticsDetails = async (ip) => {
-        if (!ip || !config.scamalytics.apiKey || !config.scamalytics.username) return null;
-        try {
-            const url = `${config.scamalytics.baseUrl}${config.scamalytics.username}/?key=${config.scamalytics.apiKey}&ip=${ip}`;
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(`Scamalytics status: ${response.status}`);
-            const data = await response.json();
-            return (data.status === 'ok') ? { score: data.score, risk: data.risk } : null;
-        } catch (error) {
-            console.error(`Failed to fetch Scamalytics for IP ${ip}:`, error);
-            return null;
-        }
-    };
-    
-    // Fetch all data in parallel for maximum speed
-    const [clientDetails, proxyDetails, scamalyticsData] = await Promise.all([
-        getIpDetails(clientIp),
-        getIpDetails(proxyHost),
-        getScamalyticsDetails(clientIp)
-    ]);
-    
-    const responseData = {
-        client: {
-            ...clientDetails,
-            risk: scamalyticsData,
-        },
-        proxy: {
-            host: config.proxyAddress,
-            ...proxyDetails
-        }
-    };
-    
-    return new Response(JSON.stringify(responseData), {
-        headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*' // Allow cross-origin requests if needed
-        },
-    });
-}
-
-
-// --- WEBSOCKET & PROXY LOGIC ---
-async function handleWebSocket(request, env, ctx) {
-  const webSocketPair = new WebSocketPair();
-  const [client, webSocket] = Object.values(webSocketPair);
-  webSocket.accept();
-
-  const log = (info, event) => console.log(`[WS] ${info}`, event || '');
-  const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
-  const readableWebSocketStream = makeReadableWebSocketStream(webSocket, earlyDataHeader, log);
-  
-  let remoteSocketWrapper = { value: null };
-  let isHeaderProcessed = false;
-
-  readableWebSocketStream.pipeTo(new WritableStream({
-    async write(chunk, controller) {
-      if (isHeaderProcessed && remoteSocketWrapper.value) {
-        const writer = remoteSocketWrapper.value.writable.getWriter();
-        try {
-          await writer.write(chunk);
-        } finally {
-          writer.releaseLock();
-        }
-        return;
-      }
-
-      const { hasError, message, addressRemote, portRemote, rawDataIndex, ProtocolVersion, isUDP } = await processVlessHeader(chunk, env, ctx);
-
-      if (hasError) {
-        log(`VLESS Header Error: ${message}`);
-        return controller.error(new Error(message));
-      }
-      if (isUDP) {
-        log('UDP is not supported.');
-        return controller.error(new Error('UDP not supported'));
-      }
-      
-      const initialClientData = chunk.slice(rawDataIndex);
-      
-      const remoteSocket = await handleTCPOutbound({
-        addressRemote,
-        portRemote,
-        vlessResponseHeader: new Uint8Array([ProtocolVersion[0], 0]),
-        initialClientData,
-        webSocket,
-        log: (msg, ev) => console.log(`[${addressRemote}:${portRemote}] ${msg}`, ev || ''),
-      });
-
-      if (!remoteSocket) {
-        return controller.error(new Error('Failed to establish remote connection.'));
-      }
-      
-      remoteSocketWrapper.value = remoteSocket;
-      isHeaderProcessed = true;
-
-      remoteSocket.readable
-        .pipeTo(new WritableStream({
-          write(chunk) {
-            if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
-              webSocket.send(chunk);
-            }
-          },
-          close: () => log('Remote socket readable stream closed.'),
-          abort: (err) => log('Remote socket readable stream aborted:', err),
-        }))
-        .catch(err => log('Error piping remote to WebSocket:', err));
-    },
-    abort: (err) => log('WebSocket readable stream aborted:', err),
-  }))
-  .catch(err => {
-    log('WebSocket pipeline failed:', err);
-    safeCloseWebSocket(webSocket);
-  });
-
-  return new Response(null, { status: 101, webSocket: client });
-}
-
-async function handleTCPOutbound({ addressRemote, portRemote, vlessResponseHeader, initialClientData, webSocket, log }) {
-  try {
-    log('Connecting to destination...');
-    const remoteSocket = await connect({ hostname: addressRemote, port: portRemote });
-    log('Connection successful.');
-
-    if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
-      webSocket.send(vlessResponseHeader);
-    }
-
-    const writer = remoteSocket.writable.getWriter();
-    await writer.write(initialClientData);
-    writer.releaseLock();
-
-    return remoteSocket;
-  } catch (error) {
-    log(`Connection to ${addressRemote}:${portRemote} failed`, error);
-    safeCloseWebSocket(webSocket, 1011, `Proxy connection failed: ${error.message}`);
-    return null;
-  }
-}
-
-// --- VLESS & UTILITY FUNCTIONS ---
-async function processVlessHeader(vlessBuffer, env, ctx) {
-  if (vlessBuffer.byteLength < 24) return { hasError: true, message: 'Invalid VLESS header' };
-  const dataView = new DataView(vlessBuffer);
-  const version = dataView.getUint8(0);
-  const uuid = stringify(new Uint8Array(vlessBuffer.slice(1, 17)));
-
-  if (!await isValidUser(uuid, env, ctx)) return { hasError: true, message: 'Invalid user' };
-
-  const optLength = dataView.getUint8(17);
-  const command = dataView.getUint8(18 + optLength);
-  const portIndex = 18 + optLength + 1;
-  const portRemote = dataView.getUint16(portIndex);
-  const addressType = dataView.getUint8(portIndex + 2);
-
-  let addressRemote, rawDataIndex;
-  switch (addressType) {
-    case 1: // IPv4
-      addressRemote = new Uint8Array(vlessBuffer.slice(portIndex + 3, portIndex + 7)).join('.');
-      rawDataIndex = portIndex + 7;
-      break;
-    case 2: // Domain
-      const addressLength = dataView.getUint8(portIndex + 3);
-      addressRemote = new TextDecoder().decode(vlessBuffer.slice(portIndex + 4, portIndex + 4 + addressLength));
-      rawDataIndex = portIndex + 4 + addressLength;
-      break;
-    case 3: // IPv6
-      const ipv6 = Array.from({ length: 8 }, (_, i) => dataView.getUint16(portIndex + 3 + i * 2).toString(16)).join(':');
-      addressRemote = `[${ipv6}]`;
-      rawDataIndex = portIndex + 19;
-      break;
-    default:
-      return { hasError: true, message: `Invalid addressType: ${addressType}` };
-  }
-
-  return {
-    hasError: false, addressRemote, portRemote, rawDataIndex,
-    ProtocolVersion: new Uint8Array([version]), isUDP: command === 2,
-  };
-}
-
-const isValidUUID = (uuid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
-
-async function isValidUser(userID, env, ctx) {
-    if (!isValidUUID(userID)) return false;
-    const cacheKey = `user:${userID}`;
-    const cached = await env.KV.get(cacheKey);
-    if (cached === 'valid') return true;
-    if (cached === 'invalid') return false;
-
-    try {
-        const now = Math.floor(Date.now() / 1000);
-        const stmt = env.DB.prepare('SELECT expiration_timestamp, status FROM users WHERE id = ?');
-        const user = await stmt.bind(userID).first();
-        if (!user || user.expiration_timestamp < now || user.status !== 'active') {
-            await env.KV.put(cacheKey, 'invalid', { expirationTtl: 3600 });
-            return false;
-        }
-        ctx.waitUntil(env.DB.prepare('UPDATE users SET last_accessed = ? WHERE id = ?').bind(now, userID).run());
-        await env.KV.put(cacheKey, 'valid', { expiration: user.expiration_timestamp });
-        return true;
-    } catch (e) {
-        console.error('D1 query failed in isValidUser:', e);
-        return false;
-    }
-}
-
-
-function makeReadableWebSocketStream(webSocket, earlyData, log) {
-  let readableStreamCancel = false;
-  return new ReadableStream({
-    start(controller) {
-      webSocket.addEventListener('message', (event) => {
-        if (readableStreamCancel) return;
-        controller.enqueue(event.data);
-      });
-      webSocket.addEventListener('close', () => {
-        if (readableStreamCancel) return;
-        controller.close();
-      });
-      webSocket.addEventListener('error', (err) => {
-        if (readableStreamCancel) return;
-        log('WebSocket error', err);
-        controller.error(err);
-      });
-      const { earlyData: parsedEarlyData, error } = base64ToArrayBuffer(earlyData);
-      if (error) {
-        controller.error(error);
-      } else if (parsedEarlyData) {
-        controller.enqueue(parsedEarlyData);
-      }
-    },
-    pull() {},
-    cancel(reason) {
-      log(`ReadableStream cancelled`, reason);
-      readableStreamCancel = true;
-      safeCloseWebSocket(webSocket);
-    },
-  });
-}
-
-function safeCloseWebSocket(socket, code, reason) {
-  try {
-    if (socket.readyState === CONST.WS_READY_STATE_OPEN || socket.readyState === CONST.WS_READY_STATE_CLOSING) {
-      socket.close(code, reason);
-    }
-  } catch (error) { console.error('safeCloseWebSocket error:', error); }
-}
-
-const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
-function stringify(arr) {
-  const uuid = (
-    byteToHex[arr[0]]+byteToHex[arr[1]]+byteToHex[arr[2]]+byteToHex[arr[3]]+'-'+
-    byteToHex[arr[4]]+byteToHex[arr[5]]+'-'+
-    byteToHex[arr[6]]+byteToHex[arr[7]]+'-'+
-    byteToHex[arr[8]]+byteToHex[arr[9]]+'-'+
-    byteToHex[arr[10]]+byteToHex[arr[11]]+byteToHex[arr[12]]+byteToHex[arr[13]]+byteToHex[arr[14]]+byteToHex[arr[15]]
-  ).toLowerCase();
-  if (!isValidUUID(uuid)) throw new TypeError('Invalid UUID');
-  return uuid;
-}
-
-function base64ToArrayBuffer(base64Str) {
-    if (!base64Str) return { earlyData: null, error: null };
-    try {
-        const binaryStr = atob(base64Str.replace(/-/g, '+').replace(/_/g, '/'));
-        const buffer = new ArrayBuffer(binaryStr.length);
-        const view = new Uint8Array(buffer);
-        for (let i = 0; i < binaryStr.length; i++) view[i] = binaryStr.charCodeAt(i);
-        return { earlyData: buffer, error: null };
-    } catch (error) { return { earlyData: null, error }; }
-}
-
-// --- ALL OTHER FUNCTIONS (Admin Panel, HTML pages, subscriptions, etc.) ---
 
 // --- CORE LOGIC & LINK GENERATION ---
 function generateRandomPath(length = 12, query = '') {
@@ -396,8 +58,8 @@ const CORE_PRESETS = {
     tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome', extra: {} },
   },
   sb: {
-    tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h3', extra: {ed: 2560} },
-    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox', extra: {ed: 2560} },
+    tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
+    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox', extra: CONST.ED_PARAMS },
   },
 };
 
@@ -438,8 +100,6 @@ async function handleIpSubscription(core, userID, hostName) {
   const mainDomains = [
     hostName, 'creativecommons.org', 'www.speedtest.net',
     'sky.rethinkdns.com', 'cf.090227.xyz', 'cdnjs.com', 'zula.ir',
-    'cfip.1323123.xyz',
-    'go.inmobi.com', 'singapore.com', 'www.visa.com',
   ];
   const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
   const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
@@ -468,6 +128,94 @@ async function handleIpSubscription(core, userID, hostName) {
   return new Response(btoa(links.join('\n')), { headers: { 'Content-Type': 'text/plain;charset=utf-8' } });
 }
 
+// --- MAIN FETCH HANDLER ---
+export default {
+  async fetch(request, env, ctx) {
+    try {
+      if (!env.DB || !env.KV) return new Response('Service Unavailable: D1 or KV binding is not configured.', { status: 503 });
+      if (!env.ADMIN_KEY) console.error('CRITICAL: ADMIN_KEY secret is not set in environment variables.');
+
+      const url = new URL(request.url);
+      const pathname = url.pathname;
+      const cfg = Config.fromEnv(env);
+
+      if (pathname === '/scamalytics-lookup') return handleScamalyticsLookup(request, cfg);
+
+      if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+        const parts = pathname.slice(1).split('/');
+        const userID = parts.length > 1 && parts[0] === 'users' ? parts[1] : parts[0];
+        if (!isValidUUID(userID) || !(await isValidUser(userID, env, ctx))) return new Response('Invalid or expired user.', { status: 403 });
+        const requestConfig = {
+          userID,
+          proxyIP: cfg.proxyIP,
+          proxyPort: cfg.proxyPort,
+          socks5Address: cfg.socks5.address,
+          socks5Relay: cfg.socks5.relayMode,
+          enableSocks: cfg.socks5.enabled,
+          parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
+        };
+        return ProtocolOverWSHandler(request, requestConfig);
+      }
+
+      if (pathname.startsWith('/admin')) return handleAdminRoutes(request, env);
+
+      const parts = pathname.slice(1).split('/');
+      let userID;
+      if (parts[0] === 'users' && parts.length > 1) {
+        userID = parts[1];
+        if (await isValidUser(userID, env, ctx)) {
+          return handleConfigPage(userID, url.hostname, cfg.proxyAddress);
+        }
+      } else if ((parts[0] === 'xray' || parts[0] === 'sb') && parts.length > 1) {
+        userID = parts[1];
+        if (await isValidUser(userID, env, ctx)) {
+          return handleIpSubscription(parts[0], userID, url.hostname);
+        }
+      } else if (parts.length === 1 && isValidUUID(parts[0])) {
+        userID = parts[0];
+        if (await isValidUser(userID, env, ctx)) {
+          return handleConfigPage(userID, url.hostname, cfg.proxyAddress);
+        }
+      }
+
+      return new Response('404 - Not Found: The requested user or path does not exist.', { status: 404 });
+    } catch (err) {
+      console.error('Unhandled Exception:', err.stack);
+      return new Response(`500 - Internal Server Error: ${err.message}`, { status: 500 });
+    }
+  },
+};
+
+// --- HELPERS & UTILITIES ---
+const isValidUUID = (uuid) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uuid);
+
+async function isValidUser(userID, env, ctx) {
+  if (!isValidUUID(userID)) return false;
+  const cacheKey = `user:${userID}`;
+  const cached = await env.KV.get(cacheKey);
+  if (cached === 'valid') return true;
+  if (cached === 'invalid') return false;
+  try {
+    const now = Math.floor(Date.now() / 1000);
+    const stmt = env.DB.prepare('SELECT expiration_timestamp, status FROM users WHERE id = ?');
+    const user = await stmt.bind(userID).first();
+    if (!user || user.expiration_timestamp < now || user.status !== 'active') {
+      await env.KV.put(cacheKey, 'invalid', { expirationTtl: 3600 });
+      return false;
+    }
+    ctx.waitUntil(env.DB.prepare('UPDATE users SET last_accessed = ? WHERE id = ?').bind(now, userID).run());
+    await env.KV.put(cacheKey, 'valid', { expiration: user.expiration_timestamp });
+    return true;
+  } catch (e) {
+    console.error('D1 query failed in isValidUser:', e);
+    return false;
+  }
+}
+
+async function invalidateUserCache(userID, env) {
+  await env.KV.delete(`user:${userID}`);
+}
+
 // --- ADMIN PANEL API & UI ---
 async function handleAdminRoutes(request, env) {
   const url = new URL(request.url);
@@ -486,6 +234,7 @@ async function handleAdminRoutes(request, env) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  // Protected API Routes
   try {
     if (request.method === 'POST' && path === '/api/users') {
       const body = await request.json();
@@ -495,12 +244,9 @@ async function handleAdminRoutes(request, env) {
       }
       const expirationTimestamp = Math.floor(new Date(`${expiration_date}T${expiration_time}:00Z`).getTime() / 1000);
       const now = Math.floor(Date.now() / 1000);
-
-      await env.DB.prepare(
-        'INSERT INTO users (id, expiration_timestamp, created_at, last_accessed, status, notes, admin_key) VALUES (?, ?, ?, ?, ?, ?, ?)'
-      ).bind(id, expirationTimestamp, now, now, 'active', notes || null, authKey).run();
-
-      await env.KV.delete(`user:${id}`);
+      await env.DB.prepare('INSERT INTO users (id, expiration_timestamp, created_at, last_accessed, status, notes) VALUES (?, ?, ?, ?, ?, ?)')
+        .bind(id, expirationTimestamp, now, now, 'active', notes || null).run();
+      await invalidateUserCache(id, env);
       return Response.json({ success: true });
     }
 
@@ -513,12 +259,12 @@ async function handleAdminRoutes(request, env) {
       const id = path.substring('/api/users/'.length);
       if (!isValidUUID(id)) return Response.json({ error: 'Invalid UUID format' }, { status: 400 });
       await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
-      await env.KV.delete(`user:${id}`);
+      await invalidateUserCache(id, env);
       return Response.json({ success: true });
     }
   } catch (e) {
     console.error('Admin API Error:', e);
-    return Response.json({ error: `An internal server error occurred: ${e.message}` }, { status: 500 });
+    return Response.json({ error: 'An internal server error occurred' }, { status: 500 });
   }
 
   return new Response('Admin endpoint not found', { status: 404 });
@@ -611,37 +357,412 @@ function getAdminDashboardHTML() {
     const apiHeaders = { 'Content-Type': 'application/json', 'Authorization': adminKey };
     async function apiFetch(endpoint, options={}){const res=await fetch('/admin/api'+endpoint,{...options,headers:apiHeaders});if(res.status===401){alert('Unauthorized!');window.location.href='/admin/login';}return res;}
     function generateUUID(){document.getElementById('new-id').value=crypto.randomUUID();}
-    async function createUser(){const id=document.getElementById('new-id').value;const date=document.getElementById('exp-date').value;const time=document.getElementById('exp-time').value;const notes=document.getElementById('notes').value;if(!id||!date||!time)return alert('Fill required fields.');const res=await apiFetch('/users',{method:'POST',body:JSON.stringify({id,expiration_date:date,expiration_time:time,notes})});if(res.ok){alert('User created!');loadUsers();}else{alert('Error creating user.');}}
+    async function createUser(){const id=document.getElementById('new-id').value;const date=document.getElementById('exp-date').value;const time=document.getElementById('exp-time').value;const notes=document.getElementById('notes').value;if(!id||!date||!time)return alert('Fill required fields.');const res=await apiFetch('/users',{method:'POST',body:JSON.stringify({id,expiration_date:date,expiration_time:time,notes})});if(res.ok){alert('User created!');loadUsers();}else{alert('Error!');}}
     async function loadUsers(){const res=await apiFetch('/users');const users=await res.json();const tbody=document.getElementById('user-table').querySelector('tbody');tbody.innerHTML='';const now=Date.now()/1000;users.forEach(u=>{const expiry=new Date(u.expiration_timestamp*1000).toLocaleString();const created=new Date(u.created_at*1000).toLocaleDateString();const statusClass=u.expiration_timestamp>now&&u.status==='active'?'':'expired';tbody.innerHTML+=\`<tr><td>\${u.id}</td><td class="\${statusClass}">\${expiry}</td><td>\${created}</td><td class="\${statusClass}">\${u.status}</td><td>\${u.notes||''}</td><td><button onclick="deleteUser('\${u.id}')">Delete</button></td></tr>\`;});}
-    async function deleteUser(id){if(!confirm('Delete user?'))return;const res=await apiFetch(\`/users/\${id}\`,{method:'DELETE'});if(res.ok){alert('User deleted!');loadUsers();}else{alert('Error deleting user.');}}
+    async function deleteUser(id){if(!confirm('Delete user?'))return;const res=await apiFetch(\`/users/\${id}\`,{method:'DELETE'});if(res.ok){alert('User deleted!');loadUsers();}else{alert('Error!');}}
     window.onload=()=>{generateUUID();loadUsers();};
   </script></body></html>`;
 }
 
+// --- VLESS PROTOCOL HANDLERS ---
+async function ProtocolOverWSHandler(request, config) {
+  const webSocketPair = new WebSocketPair();
+  const [client, webSocket] = Object.values(webSocketPair);
+  webSocket.accept();
+  let address = '';
+  let portWithRandomLog = '';
+  let udpStreamWriter = null;
+  const log = (info, event) => {
+    console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
+  };
+  const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
+  const readableWebSocketStream = MakeReadableWebSocketStream(webSocket, earlyDataHeader, log);
+  let remoteSocketWapper = { value: null };
+  readableWebSocketStream
+    .pipeTo(
+      new WritableStream({
+        async write(chunk, controller) {
+          if (udpStreamWriter) {
+            return udpStreamWriter.write(chunk);
+          }
+          if (remoteSocketWapper.value) {
+            const writer = remoteSocketWapper.value.writable.getWriter();
+            await writer.write(chunk);
+            writer.releaseLock();
+            return;
+          }
+          const {
+            hasError,
+            message,
+            addressType,
+            portRemote = 443,
+            addressRemote = '',
+            rawDataIndex,
+            ProtocolVersion = new Uint8Array([0, 0]),
+            isUDP,
+          } = ProcessProtocolHeader(chunk, config.userID);
+          address = addressRemote;
+          portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'} `;
+          if (hasError) {
+            throw new Error(message);
+          }
+          const vlessResponseHeader = new Uint8Array([ProtocolVersion[0], 0]);
+          const rawClientData = chunk.slice(rawDataIndex);
+          if (isUDP) {
+            if (portRemote === 53) {
+              const dnsPipeline = await createDnsPipeline(webSocket, vlessResponseHeader, log);
+              udpStreamWriter = dnsPipeline.write;
+              udpStreamWriter(rawClientData);
+            } else {
+              throw new Error('UDP proxy is only enabled for DNS (port 53)');
+            }
+            return;
+          }
+          HandleTCPOutBound(
+            remoteSocketWapper,
+            addressType,
+            addressRemote,
+            portRemote,
+            rawClientData,
+            webSocket,
+            vlessResponseHeader,
+            log,
+            config,
+          );
+        },
+        close() {
+          log(`readableWebSocketStream closed`);
+        },
+        abort(err) {
+          log(`readableWebSocketStream aborted`, err);
+        },
+      }),
+    )
+    .catch(err => {
+      console.error('Pipeline failed:', err.stack || err);
+    });
+  return new Response(null, { status: 101, webSocket: client });
+}
+
+function ProcessProtocolHeader(protocolBuffer, userID) {
+  if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
+  const dataView = new DataView(protocolBuffer);
+  const version = dataView.getUint8(0);
+  const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
+  const uuids = userID.split(',').map(id => id.trim());
+  const isValidUser = uuids.some(uuid => slicedBufferString === uuid);
+  if (!isValidUser) return { hasError: true, message: 'invalid user' };
+  const optLength = dataView.getUint8(17);
+  const command = dataView.getUint8(18 + optLength);
+  if (command !== 1 && command !== 2) return { hasError: true, message: `command ${command} is not supported` };
+  const portIndex = 18 + optLength + 1;
+  const portRemote = dataView.getUint16(portIndex);
+  const addressType = dataView.getUint8(portIndex + 2);
+  let addressValue, addressLength, addressValueIndex;
+  switch (addressType) {
+    case 1:
+      addressLength = 4;
+      addressValueIndex = portIndex + 3;
+      addressValue = new Uint8Array(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join('.');
+      break;
+    case 2:
+      addressLength = dataView.getUint8(portIndex + 3);
+      addressValueIndex = portIndex + 4;
+      addressValue = new TextDecoder().decode(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+      break;
+    case 3:
+      addressLength = 16;
+      addressValueIndex = portIndex + 3;
+      addressValue = Array.from({ length: 8 }, (_, i) => dataView.getUint16(addressValueIndex + i * 2).toString(16)).join(':');
+      break;
+    default:
+      return { hasError: true, message: `invalid addressType: ${addressType}` };
+  }
+  if (!addressValue) return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
+  return {
+    hasError: false,
+    addressRemote: addressValue,
+    addressType,
+    portRemote,
+    rawDataIndex: addressValueIndex + addressLength,
+    ProtocolVersion: new Uint8Array([version]),
+    isUDP: command === 2,
+  };
+}
+
+async function HandleTCPOutBound(remoteSocket, addressType, addressRemote, portRemote, rawClientData, webSocket, protocolResponseHeader, log, config) {
+  async function connectAndWrite(address, port, socks = false) {
+    let tcpSocket;
+    if (config.socks5.relayMode) {
+      tcpSocket = await socks5Connect(addressType, address, port, log, config.parsedSocks5Address);
+    } else {
+      tcpSocket = socks
+        ? await socks5Connect(addressType, address, port, log, config.parsedSocks5Address)
+        : connect({ hostname: address, port: port });
+    }
+    remoteSocket.value = tcpSocket;
+    log(`connected to ${address}:${port}`);
+    const writer = tcpSocket.writable.getWriter();
+    await writer.write(rawClientData);
+    writer.releaseLock();
+    return tcpSocket;
+  }
+  async function retry() {
+    const tcpSocket = config.enableSocks
+      ? await connectAndWrite(addressRemote, portRemote, true)
+      : await connectAndWrite(config.proxyIP || addressRemote, config.proxyPort || portRemote, false);
+    tcpSocket.closed.catch(error => console.log('retry tcpSocket closed error', error)).finally(() => safeCloseWebSocket(webSocket));
+    RemoteSocketToWS(tcpSocket, webSocket, protocolResponseHeader, null, log);
+  }
+  const tcpSocket = await connectAndWrite(addressRemote, portRemote);
+  RemoteSocketToWS(tcpSocket, webSocket, protocolResponseHeader, retry, log);
+}
+
+function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
+  return new ReadableStream({
+    start(controller) {
+      webSocketServer.addEventListener('message', event => controller.enqueue(event.data));
+      webSocketServer.addEventListener('close', () => {
+        safeCloseWebSocket(webSocketServer);
+        controller.close();
+      });
+      webSocketServer.addEventListener('error', err => {
+        log('webSocketServer has error');
+        controller.error(err);
+      });
+      const { earlyData, error } = base64ToArrayBuffer(earlyDataHeader);
+      if (error) controller.error(error);
+      else if (earlyData) controller.enqueue(earlyData);
+    },
+    pull() {},
+    cancel(reason) {
+      log(`ReadableStream was canceled, due to ${reason}`);
+      safeCloseWebSocket(webSocketServer);
+    },
+  });
+}
+
+async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
+  let hasIncomingData = false;
+  try {
+    await remoteSocket.readable.pipeTo(
+      new WritableStream({
+        async write(chunk) {
+          if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN) throw new Error('WebSocket is not open');
+          hasIncomingData = true;
+          const dataToSend = protocolResponseHeader ? await new Blob([protocolResponseHeader, chunk]).arrayBuffer() : chunk;
+          webSocket.send(dataToSend);
+          protocolResponseHeader = null;
+        },
+        close() {
+          log(`Remote connection readable closed. Had incoming data: ${hasIncomingData}`);
+        },
+        abort(reason) {
+          console.error(`Remote connection readable aborted:`, reason);
+        },
+      }),
+    );
+  } catch (error) {
+    console.error(`RemoteSocketToWS error:`, error.stack || error);
+    safeCloseWebSocket(webSocket);
+  }
+  if (!hasIncomingData && retry) {
+    log(`No incoming data, retrying`);
+    await retry();
+  }
+}
+
+function base64ToArrayBuffer(base64Str) {
+  if (!base64Str) return { earlyData: null, error: null };
+  try {
+    const binaryStr = atob(base64Str.replace(/-/g, '+').replace(/_/g, '/'));
+    const buffer = new ArrayBuffer(binaryStr.length);
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < binaryStr.length; i++) {
+      view[i] = binaryStr.charCodeAt(i);
+    }
+    return { earlyData: buffer, error: null };
+  } catch (error) {
+    return { earlyData: null, error };
+  }
+}
+
+function safeCloseWebSocket(socket) {
+  try {
+    if (socket.readyState === CONST.WS_READY_STATE_OPEN || socket.readyState === CONST.WS_READY_STATE_CLOSING) {
+      socket.close();
+    }
+  } catch (error) {
+    console.error('safeCloseWebSocket error:', error);
+  }
+}
+
+const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
+
+function unsafeStringify(arr, offset = 0) {
+  return (
+    byteToHex[arr[offset]] + byteToHex[arr[offset + 1]] + byteToHex[arr[offset + 2]] + byteToHex[arr[offset + 3]] + '-' +
+    byteToHex[arr[offset + 4]] + byteToHex[arr[offset + 5]] + '-' +
+    byteToHex[arr[offset + 6]] + byteToHex[arr[offset + 7]] + '-' +
+    byteToHex[arr[offset + 8]] + byteToHex[arr[offset + 9]] + '-' +
+    byteToHex[arr[offset + 10]] + byteToHex[arr[offset + 11]] + byteToHex[arr[offset + 12]] + byteToHex[arr[offset + 13]] + byteToHex[arr[offset + 14]] + byteToHex[arr[offset + 15]]
+  ).toLowerCase();
+}
+
+function stringify(arr, offset = 0) {
+  const uuid = unsafeStringify(arr, offset);
+  if (!isValidUUID(uuid)) throw new TypeError('Stringified UUID is invalid');
+  return uuid;
+}
+
+async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
+  let isHeaderSent = false;
+  const transformStream = new TransformStream({
+    transform(chunk, controller) {
+      for (let index = 0; index < chunk.byteLength; ) {
+        const lengthBuffer = chunk.slice(index, index + 2);
+        const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
+        const udpData = new Uint8Array(chunk.slice(index + 2, index + 2 + udpPacketLength));
+        index = index + 2 + udpPacketLength;
+        controller.enqueue(udpData);
+      }
+    },
+  });
+  transformStream.readable.pipeTo(
+    new WritableStream({
+      async write(chunk) {
+        try {
+          const resp = await fetch(`https://1.1.1.1/dns-query`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/dns-message' },
+            body: chunk,
+          });
+          const dnsQueryResult = await resp.arrayBuffer();
+          const udpSize = dnsQueryResult.byteLength;
+          const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
+          if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
+            log(`DNS query successful, length: ${udpSize}`);
+            if (isHeaderSent) {
+              webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+            } else {
+              webSocket.send(await new Blob([vlessResponseHeader, udpSizeBuffer, dnsQueryResult]).arrayBuffer());
+              isHeaderSent = true;
+            }
+          }
+        } catch (error) {
+          log('DNS query error: ' + error);
+        }
+      },
+    }),
+  ).catch(e => log('DNS stream error: ' + e));
+  const writer = transformStream.writable.getWriter();
+  return { write: chunk => writer.write(chunk) };
+}
+
+async function socks5Connect(addressType, addressRemote, portRemote, log, parsedSocks5Addr) {
+  const { username, password, hostname, port } = parsedSocks5Addr;
+  const socket = connect({ hostname, port });
+  const writer = socket.writable.getWriter();
+  const reader = socket.readable.getReader();
+  const encoder = new TextEncoder();
+  await writer.write(new Uint8Array([5, 2, 0, 2]));
+  let res = (await reader.read()).value;
+  if (res[0] !== 0x05 || res[1] === 0xff) throw new Error('SOCKS5 server connection failed.');
+  if (res[1] === 0x02) {
+    if (!username || !password) throw new Error('SOCKS5 auth credentials not provided.');
+    const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
+    await writer.write(authRequest);
+    res = (await reader.read()).value;
+    if (res[0] !== 0x01 || res[1] !== 0x00) throw new Error('SOCKS5 authentication failed.');
+  }
+  let DSTADDR;
+  switch (addressType) {
+    case 1: DSTADDR = new Uint8Array([1, ...addressRemote.split('.').map(Number)]); break;
+    case 2: DSTADDR = new Uint8Array([3, addressRemote.length, ...encoder.encode(addressRemote)]); break;
+    case 3: DSTADDR = new Uint8Array([4, ...addressRemote.split(':').flatMap(x => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)])]); break;
+    default: throw new Error(`Invalid addressType for SOCKS5: ${addressType}`);
+  }
+  const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
+  await writer.write(socksRequest);
+  res = (await reader.read()).value;
+  if (res[1] !== 0x00) throw new Error('Failed to open SOCKS5 connection.');
+  writer.releaseLock();
+  reader.releaseLock();
+  return socket;
+}
+
+function socks5AddressParser(address) {
+  try {
+    const [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
+    const [hostname, portStr] = hostPart.split(':');
+    const port = parseInt(portStr, 10);
+    if (!hostname || isNaN(port)) throw new Error();
+    let username, password;
+    if (authPart) {
+      [username, password] = authPart.split(':');
+      if (!username) throw new Error();
+    }
+    return { username, password, hostname, port };
+  } catch {
+    throw new Error('Invalid SOCKS5 address format. Expected [user:pass@]host:port');
+  }
+}
+
+async function handleScamalyticsLookup(request, config) {
+  const url = new URL(request.url);
+  const ipToLookup = url.searchParams.get('ip');
+  if (!ipToLookup) {
+    return new Response(JSON.stringify({ error: 'Missing IP parameter' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const { username, apiKey, baseUrl } = config.scamalytics;
+  if (!username || !apiKey) {
+    return new Response(JSON.stringify({ error: 'Scamalytics API credentials not configured.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
+  try {
+    const scamalyticsResponse = await fetch(scamalyticsUrl);
+    const responseBody = await scamalyticsResponse.json();
+    const dbipResponse = await fetch(`https://api.db-ip.com/v2/free/${ipToLookup}`);
+    const dbip = await dbipResponse.json();
+    return new Response(JSON.stringify({ scamalytics: responseBody, external_datasources: { dbip } }), { headers });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.toString() }), { status: 500, headers });
+  }
+}
+
+// --- PAGE ASSETS ---
 function getPageCSS() {
-  // This function contains the full CSS for the page.
-  // It is kept as is because it's well-structured.
   return `
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
-     @font-face {
-     font-family: "Aldine 401 BT Web";
-     src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
-     font-weight: 400; font-style: normal; font-display: swap;
-   }
-   @font-face {
-     font-family: "Styrene B LC";
-     src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
-     font-weight: 400; font-style: normal; font-display: swap;
-   }
-   @font-face {
-     font-family: "Styrene B LC";
-     src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
-     font-weight: 500; font-style: normal; font-display: swap;
-   }
+      @font-face {
+	      font-family: "Aldine 401 BT Web";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
+	      font-weight: 400; font-style: normal; font-display: swap;
+	    }
+	    @font-face {
+	      font-family: "Styrene B LC";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
+	      font-weight: 400; font-style: normal; font-display: swap;
+	    }
+	    @font-face {
+	      font-family: "Styrene B LC";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
+	      font-weight: 500; font-style: normal; font-display: swap;
+	    }
       :root {
         --background-primary: #2a2421; --background-secondary: #35302c; --background-tertiary: #413b35;
         --border-color: #5a4f45; --border-color-hover: #766a5f; --text-primary: #e5dfd6; --text-secondary: #b3a89d;
@@ -651,9 +772,9 @@ function getPageCSS() {
         --border-radius: 8px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
         --status-success: #70b570; --status-error: #e05d44; --status-warning: #e0bc44; --status-info: #4f90c4;
         --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
-     --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
-     --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
-   }
+	      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
+	      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
+	    }
       body {
         font-family: var(--sans-serif); font-size: 16px; font-weight: 400; font-style: normal;
         background-color: var(--background-primary); color: var(--text-primary);
@@ -756,86 +877,84 @@ function getPageCSS() {
       .client-btn:hover .client-icon { transform: rotate(15deg) scale(1.1); }
       .client-btn .button-text { position: relative; z-index: 2; transition: letter-spacing 0.3s ease; }
       .client-btn:hover .button-text { letter-spacing: 0.5px; }
-   .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-   .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
-   .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
-   .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
-   .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
-   .footer p { margin-bottom: 0px; }
-   ::-webkit-scrollbar { width: 8px; height: 8px; }
-   ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
-   ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
-   ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
-   * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
-   .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
-   .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
-   .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-   .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
-   .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
-   .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
-   .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
-   .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-   .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
-   .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-   .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
-   .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
-   .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
-   .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
-   .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
-   @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-   .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
-   @media (max-width: 768px) {
-     body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
-     .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
-     .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
-     .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
-     .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
-     .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
-     .config-card { padding: 16px; } .config-title { font-size: 18px; }
-     .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
-     .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-     .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
-   }
-   @media (max-width: 480px) {
-     body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
-     .header h1 { font-size: 20px; } .header p { font-size: 8px; }
-     .ip-info-section { padding: 14px; gap: 16px; }
-     .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-     .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
-     .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
-     .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
-     .config-card { padding: 10px; } .config-title { font-size: 16px; }
-     .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
-     .config-content pre { font-size: 10px; }
-     .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-     .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
-     .footer { font-size: 10px; }
-   }
-   @media (max-width: 359px) {
-         body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
-         .header h1 { font-size: 16px; } .header p { font-size: 6px; }
-         .ip-info-section { padding: 12px; gap: 12px; }
-         .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
-         .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
-         .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
- .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
-         .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
-         .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
- .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-         .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
-       }
-     
-       @media (min-width: 360px) { .container { max-width: 95%; } }
-       @media (min-width: 480px) { .container { max-width: 90%; } }
-       @media (min-width: 640px) { .container { max-width: 600px; } }
-       @media (min-width: 768px) { .container { max-width: 720px; } }
-       @media (min-width: 1024px) { .container { max-width: 800px; } }
+	    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+	    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
+	    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
+	    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
+	    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
+	    .footer p { margin-bottom: 0px; }
+	    ::-webkit-scrollbar { width: 8px; height: 8px; }
+	    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
+	    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
+	    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
+	    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
+	    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
+	    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
+	    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+	    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
+	    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
+	    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
+	    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
+	    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+	    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
+	    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+	    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
+	    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
+	    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
+	    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
+	    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
+	    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+	    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+	    @media (max-width: 768px) {
+	      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
+	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
+	      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
+	      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
+	      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
+	      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
+	      .config-card { padding: 16px; } .config-title { font-size: 18px; }
+	      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
+	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+	      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
+	    }
+	    @media (max-width: 480px) {
+	      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
+	      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
+	      .ip-info-section { padding: 14px; gap: 16px; }
+	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
+	      .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
+	      .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
+	      .config-card { padding: 10px; } .config-title { font-size: 16px; }
+	      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
+	      .config-content pre { font-size: 10px; }
+	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
+	      .footer { font-size: 10px; }
+	    }
+	    @media (max-width: 359px) {
+          body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
+          .header h1 { font-size: 16px; } .header p { font-size: 6px; }
+          .ip-info-section { padding: 12px; gap: 12px; }
+          .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+          .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
+          .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
+		  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
+          .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
+          .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
+		  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+          .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
+        }
+    
+        @media (min-width: 360px) { .container { max-width: 95%; } }
+        @media (min-width: 480px) { .container { max-width: 90%; } }
+        @media (min-width: 640px) { .container { max-width: 600px; } }
+        @media (min-width: 768px) { .container { max-width: 720px; } }
+        @media (min-width: 1024px) { .container { max-width: 800px; } }
   `;
 }
 
 function getPageHTML(configs, clientUrls) {
-  // This HTML structure is designed to show loading skeletons initially.
-  // It is correct and does not need changes.
   return `
     <div class="container">
       <div class="header">
@@ -936,14 +1055,12 @@ function getPageHTML(configs, clientUrls) {
   `;
 }
 
-// --- MODIFIED CLIENT-SIDE SCRIPT ---
-// This script is now much simpler, faster, and more reliable.
 function getPageScript() {
   return `
       function copyToClipboard(button, text) {
         const originalHTML = button.innerHTML;
         navigator.clipboard.writeText(text).then(() => {
-          button.innerHTML = \`<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Copied!\`;
+          button.innerHTML = \`<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copied!\`;
           button.classList.add("copied");
           button.disabled = true;
           setTimeout(() => {
@@ -956,50 +1073,165 @@ function getPageScript() {
         });
       }
 
-      function updateDisplay(data) {
-        // Update Proxy Info
-        const proxy = data.proxy || {};
-        document.getElementById('proxy-host').textContent = proxy.host || 'N/A';
-        document.getElementById('proxy-ip').textContent = proxy.ip || 'N/A';
-        document.getElementById('proxy-isp').textContent = proxy.isp || 'N/A';
-        const p_loc = [proxy.city, proxy.country].filter(Boolean).join(', ');
-        const p_flag = proxy.country ? \`<img src="https://flagcdn.com/w20/\${proxy.country.toLowerCase()}.png" class="country-flag" alt="\${proxy.country}"> \` : '';
-        document.getElementById('proxy-location').innerHTML = (p_loc) ? \`\${p_flag}\${p_loc}\` : 'N/A';
-
-        // Update Client Info
-        const client = data.client || {};
-        document.getElementById('client-ip').textContent = client.ip || 'N/A';
-        document.getElementById('client-isp').textContent = client.isp || 'N/A';
-        const c_loc = [client.city, client.country].filter(Boolean).join(', ');
-        const c_flag = client.country ? \`<img src="https://flagcdn.com/w20/\${client.country.toLowerCase()}.png" class="country-flag" alt="\${client.country}"> \` : '';
-        document.getElementById('client-location').innerHTML = (c_loc) ? \`\${c_flag}\${c_loc}\` : 'N/A';
-        
-        // Update Risk Score Badge
-        const risk = client.risk;
-        let riskText = "Unknown";
-        let badgeClass = "badge-neutral";
-        if (risk && risk.score !== undefined) {
-            riskText = \`\${risk.score} - \${risk.risk.charAt(0).toUpperCase() + risk.risk.slice(1)}\`;
-            switch (risk.risk.toLowerCase()) {
-                case "low": badgeClass = "badge-yes"; break;
-                case "medium": badgeClass = "badge-warning"; break;
-                case "high": case "very high": badgeClass = "badge-no"; break;
-            }
+      async function fetchClientPublicIP() {
+        try {
+          const response = await fetch('https://api.ipify.org?format=json');
+          if (!response.ok) throw new Error(\`HTTP error! status: \${response.status}\`);
+          return (await response.json()).ip;
+        } catch (error) {
+          console.error('Error fetching client IP:', error);
+          return null;
         }
-        document.getElementById('client-proxy').innerHTML = \`<span class="badge \${badgeClass}">\${riskText}</span>\`;
+      }
+
+      async function fetchScamalyticsClientInfo(clientIp) {
+        if (!clientIp) return null;
+        try {
+          const response = await fetch(\`/scamalytics-lookup?ip=\${encodeURIComponent(clientIp)}\`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(\`Worker request failed! status: \${response.status}, details: \${errorText}\`);
+          }
+          const data = await response.json();
+          if (data.scamalytics && data.scamalytics.status === 'error') {
+              throw new Error(data.scamalytics.error || 'Scamalytics API error via Worker');
+          }
+          return data;
+        } catch (error) {
+          console.error('Error fetching from Scamalytics via Worker:', error);
+          return null;
+        }
+      }
+
+      function updateScamalyticsClientDisplay(data) {
+        const prefix = 'client';
+        if (!data || !data.scamalytics || data.scamalytics.status !== 'ok') {
+          showError(prefix, (data && data.scamalytics && data.scamalytics.error) || 'Could not load client data from Scamalytics');
+          return;
+        }
+        const sa = data.scamalytics;
+        const dbip = data.external_datasources?.dbip;
+        const elements = {
+          ip: document.getElementById(\`\${prefix}-ip\`), location: document.getElementById(\`\${prefix}-location\`),
+          isp: document.getElementById(\`\${prefix}-isp\`), proxy: document.getElementById(\`\${prefix}-proxy\`)
+        };
+        if (elements.ip) elements.ip.textContent = sa.ip || "N/A";
+        if (elements.location) {
+          const city = dbip?.cityName || '';
+          const countryName = dbip?.countryName || '';
+          const countryCode = dbip?.countryCode ? dbip.countryCode.toLowerCase() : '';
+          let locationString = 'N/A';
+          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${dbip.countryCode}" class="country-flag"> \` : '';
+          let textPart = [city, countryName].filter(Boolean).join(', ');
+          if (flagElementHtml || textPart) locationString = \`\${flagElementHtml}\${textPart}\`.trim();
+          elements.location.innerHTML = locationString || "N/A";
+        }
+        if (elements.isp) elements.isp.textContent = sa.isp || dbip?.isp || "N/A";
+        if (elements.proxy) {
+          const score = sa.score;
+          const risk = sa.risk;
+          let riskText = "Unknown";
+          let badgeClass = "badge-neutral";
+          if (risk && score !== undefined) {
+              riskText = \`\${score} - \${risk.charAt(0).toUpperCase() + risk.slice(1)}\`;
+              switch (risk.toLowerCase()) {
+                  case "low": badgeClass = "badge-yes"; break;
+                  case "medium": badgeClass = "badge-warning"; break;
+                  case "high": case "very high": badgeClass = "badge-no"; break;
+              }
+          }
+          elements.proxy.innerHTML = \`<span class="badge \${badgeClass}">\${riskText}</span>\`;
+        }
+      }
+
+      function updateIpApiIoDisplay(geo, prefix, originalHost) {
+        const hostElement = document.getElementById(\`\${prefix}-host\`);
+        if (hostElement) hostElement.textContent = originalHost || "N/A";
+        const elements = {
+          ip: document.getElementById(\`\${prefix}-ip\`), location: document.getElementById(\`\${prefix}-location\`),
+          isp: document.getElementById(\`\${prefix}-isp\`)
+        };
+        if (!geo) {
+          Object.values(elements).forEach(el => { if(el) el.innerHTML = "N/A"; });
+          return;
+        }
+        if (elements.ip) elements.ip.textContent = geo.ip || "N/A";
+        if (elements.location) {
+          const city = geo.city_name || '';
+          const countryName = geo.country_name || '';
+          const countryCode = geo.country_code ? geo.country_code.toLowerCase() : '';
+          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${geo.country_code}" class="country-flag"> \` : '';
+          let textPart = [city, countryName].filter(Boolean).join(', ');
+          elements.location.innerHTML = (flagElementHtml || textPart) ? \`\${flagElementHtml}\${textPart}\`.trim() : "N/A";
+        }
+        if (elements.isp) elements.isp.textContent = geo.isp || geo.org || geo.asn_name || geo.asn || 'N/A';
+      }
+
+      async function fetchIpApiIoInfo(ip) {
+        try {
+          const response = await fetch(\`https://ip-api.io/json/\${ip}\`);
+          if (!response.ok) throw new Error(\`HTTP error! status: \${response.status}\`);
+          return await response.json();
+        } catch (error) {
+          console.error('IP API Error (ip-api.io):', error);
+          return null;
+        }
+      }
+
+      function showError(prefix, message = "Could not load data", originalHostForProxy = null) {
+        const errorMessage = "N/A";
+        const elements = (prefix === 'proxy') 
+          ? ['host', 'ip', 'location', 'isp']
+          : ['ip', 'location', 'isp', 'proxy'];
+        
+        elements.forEach(key => {
+          const el = document.getElementById(\`\${prefix}-\${key}\`);
+          if (!el) return;
+          if (key === 'host' && prefix === 'proxy') el.textContent = originalHostForProxy || errorMessage;
+          else if (key === 'proxy' && prefix === 'client') el.innerHTML = \`<span class="badge badge-neutral">N/A</span>\`;
+          else el.innerHTML = errorMessage;
+        });
+        console.warn(\`\${prefix} data loading failed: \${message}\`);
       }
 
       async function loadNetworkInfo() {
         try {
-            const response = await fetch('/api/network-info');
-            if (!response.ok) throw new Error(\`API request failed with status \${response.status}\`);
-            const data = await response.json();
-            updateDisplay(data);
+          const proxyIpWithPort = document.body.getAttribute('data-proxy-ip') || "N/A";
+          const proxyDomainOrIp = proxyIpWithPort.split(':')[0];
+          const proxyHostEl = document.getElementById('proxy-host');
+          if(proxyHostEl) proxyHostEl.textContent = proxyIpWithPort;
+
+          if (proxyDomainOrIp && proxyDomainOrIp !== "N/A") {
+            let resolvedProxyIp = proxyDomainOrIp;
+            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) {
+              try {
+                const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
+                if (dnsRes.ok) {
+                    const dnsData = await dnsRes.json();
+                    const ipAnswer = dnsData.Answer?.find(a => a.type === 1);
+                    if (ipAnswer) resolvedProxyIp = ipAnswer.data;
+                }
+              } catch (e) { console.error('DNS resolution for proxy failed:', e); }
+            }
+            const proxyGeoData = await fetchIpApiIoInfo(resolvedProxyIp);
+            updateIpApiIoDisplay(proxyGeoData, 'proxy', proxyIpWithPort);
+          } else {
+            showError('proxy', 'Proxy Host not available', proxyIpWithPort);
+          }
+
+          const clientIp = await fetchClientPublicIP();
+          if (clientIp) {
+            const clientIpElement = document.getElementById('client-ip');
+            if(clientIpElement) clientIpElement.textContent = clientIp;
+            const scamalyticsData = await fetchScamalyticsClientInfo(clientIp);
+            updateScamalyticsClientDisplay(scamalyticsData);
+          } else {
+            showError('client', 'Could not determine your IP address.');
+          }
         } catch (error) {
-            console.error('Failed to load network info:', error);
-            // In case of error, show N/A everywhere
-            const errorData = { client: {}, proxy: { host: document.body.getAttribute('data-proxy-ip') } };
-            updateDisplay(errorData);
+          console.error('Overall network info loading failed:', error);
+          showError('proxy', \`Error: \${error.message}\`, document.body.getAttribute('data-proxy-ip') || "N/A");
+          showError('client', \`Error: \${error.message}\`);
         }
       }
 
@@ -1023,13 +1255,15 @@ function getPageScript() {
         resetToSkeleton('client');
         loadNetworkInfo().finally(() => setTimeout(() => {
           button.disabled = false; if (icon) icon.style.animation = '';
-        }, 500));
+        }, 1000));
       });
 
       const style = document.createElement('style');
       style.textContent = \`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\`;
       document.head.appendChild(style);
 
-      document.addEventListener('DOMContentLoaded', loadNetworkInfo);
+      document.addEventListener('DOMContentLoaded', () => {
+        loadNetworkInfo();
+      });
   `;
 }
