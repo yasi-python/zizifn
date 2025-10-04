@@ -1,12 +1,13 @@
 /**
  * Cloudflare Worker VLESS Proxy with Admin Panel, D1/KV User Management, and Advanced Features
  *
- * @version 2.0.0
- * @author REvil
+ * @version 2.1.0
+ * @author REvil (revised by AI)
  *
- * This script is a comprehensive, single-file solution for a professional VLESS proxy server.
- * It includes a full admin panel for user management with expiration dates, dynamic configuration pages,
- * subscription link generation, and advanced outbound routing including SOCKS5 and relay fallbacks.
+ * --- DEPLOYMENT NOTICE ---
+ * This script is designed for the CLOUDFLARE WORKERS environment.
+ * It WILL NOT work on Cloudflare Pages Functions because it requires the `cloudflare:sockets` API
+ * for direct TCP connections, which is only available on Workers.
  *
  * --- SETUP INSTRUCTIONS ---
  * 1.  Create a Cloudflare Worker.
@@ -21,12 +22,12 @@
  * 4.  Create a KV Namespace and bind it to this worker as `USER_CACHE`.
  * 5.  Set the following Environment Variables in the worker settings:
  * - `ADMIN_KEY`: A strong, secret key for the admin panel.
- * - `UUID` (optional): A default UUID for basic access if needed.
+ * - `UUID` (optional): A default UUID for basic access. Can be a comma-separated list.
  * - `PROXYIP` (optional): A fallback IP/host for failed direct connections (e.g., '1.2.3.4:443').
  * - `SOCKS5` (optional): A SOCKS5 proxy address (e.g., 'user:pass@host:port').
  *
  * --- ENDPOINTS ---
- * - `/{uuid}`: Shows the beautiful user configuration page.
+ * - `/{uuid}`: Shows the user configuration page.
  * - `/admin`: Admin panel login page.
  * - `/admin/dashboard`: Main admin dashboard for user management.
  * - `/xray/{uuid}` & `/sb/{uuid}`: Subscription links for VLESS configs.
@@ -38,7 +39,7 @@ import { connect } from 'cloudflare:sockets';
 // --- MAIN CONFIGURATION ---
 const Config = {
   // Default values. These will be overridden by environment variables if set.
-  defaultUserID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+  defaultUserID: 'd342d11e-d424-4583-b36e-524ab1f0afa4', // A default UUID for testing. It's recommended to set your own via the `UUID` env var.
   proxyIPs: ['nima.nscl.ir:443'], // Default proxy IPs if PROXYIP env var is not set.
 
   // Scamalytics API configuration
@@ -51,7 +52,6 @@ const Config = {
   // SOCKS5 configuration (controlled by environment variables)
   socks5: {
     enabled: false,
-    relayMode: false,
     address: '',
   },
 
@@ -67,6 +67,21 @@ const Config = {
     const selectedProxyIP = env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
     const [proxyHost, proxyPort = '443'] = selectedProxyIP.split(':');
 
+    let socks5Config = {
+      enabled: !!env.SOCKS5,
+      address: env.SOCKS5 || this.socks5.address,
+      parsed: null,
+    };
+
+    if (socks5Config.enabled) {
+      try {
+        socks5Config.parsed = socks5AddressParser(socks5Config.address);
+      } catch (error) {
+        console.error(`[CONFIG ERROR] Invalid SOCKS5 address format: "${socks5Config.address}". SOCKS5 will be disabled.`, error.message);
+        socks5Config.enabled = false;
+      }
+    }
+
     return {
       adminKey: env.ADMIN_KEY,
       db: env.DB,
@@ -80,11 +95,7 @@ const Config = {
         apiKey: env.SCAMALYTICS_API_KEY || this.scamalytics.apiKey,
         baseUrl: env.SCAMALYTICS_BASEURL || this.scamalytics.baseUrl,
       },
-      socks5: {
-        enabled: !!env.SOCKS5,
-        relayMode: env.SOCKS5_RELAY === 'true' || this.socks5.relayMode,
-        address: env.SOCKS5 || this.socks5.address,
-      },
+      socks5: socks5Config,
     };
   },
 };
@@ -145,14 +156,15 @@ export default {
     } else {
         // Fallback for default UUID if configured
         const defaultUsers = cfg.defaultUserID.split(',').map(id => id.trim());
+        const pathname = url.pathname;
         for (const defaultId of defaultUsers) {
-            if (url.pathname.startsWith(`/${defaultId}`)) {
+            if (pathname.startsWith(`/${defaultId}`)) {
                 return generateBeautifulConfigPage(defaultId, url.hostname, cfg.proxyAddress);
             }
-             if (url.pathname.startsWith(`/xray/${defaultId}`)) {
+             if (pathname.startsWith(`/xray/${defaultId}`)) {
                  return handleIpSubscription('xray', defaultId, url.hostname);
              }
-             if (url.pathname.startsWith(`/sb/${defaultId}`)) {
+             if (pathname.startsWith(`/sb/${defaultId}`)) {
                 return handleIpSubscription('sb', defaultId, url.hostname);
              }
         }
@@ -215,7 +227,7 @@ async function authenticateUser(userId, cfg) {
 
     return isValid;
   } catch (error) {
-    console.error(`Authentication error for UUID ${userId}:`, error);
+    console.error(`Authentication error for UUID ${userId}:`, error.stack || error);
     return false; // Fail-safe
   }
 }
@@ -273,7 +285,7 @@ async function handleVLESS(request, config) {
           if (!isUserValid) throw new Error(`Invalid or expired user: ${userID}`);
 
           address = addressRemote;
-          portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'}`;
+          portWithRandomLog = `${portRemote}--${Math.random().toString(36).substring(2, 7)} ${isUDP ? 'udp' : 'tcp'}`;
           const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
           const rawClientData = chunk.slice(rawDataIndex);
 
@@ -281,21 +293,11 @@ async function handleVLESS(request, config) {
             if (portRemote === 53) {
               const dnsPipeline = await createDnsPipeline(webSocket, vlessResponseHeader, log);
               udpStreamWriter = dnsPipeline.write;
-              udpStreamWriter(rawClientData);
+              await udpStreamWriter(rawClientData);
             } else throw new Error('UDP proxy is only enabled for DNS (port 53)');
             return;
           }
-
-          const outboundConfig = {
-            proxyIP: config.proxyIP,
-            proxyPort: config.proxyPort,
-            socks5Address: config.socks5.address,
-            socks5Relay: config.socks5.relayMode,
-            enableSocks: config.socks5.enabled,
-            parsedSocks5Address: config.socks5.enabled ?
-              socks5AddressParser(config.socks5.address) : {},
-          };
-
+          
           handleTCPOutBound(
             remoteSocketWapper,
             addressType,
@@ -305,7 +307,7 @@ async function handleVLESS(request, config) {
             webSocket,
             vlessResponseHeader,
             log,
-            outboundConfig
+            config
           );
         },
         close: () => log(`readableWebSocketStream closed`),
@@ -397,7 +399,7 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
     };
     log(`Connecting to ${address}:${port}`);
     const tcpSocket = isSocks ?
-      await socks5Connect(addressType, address, port, log, config.parsedSocks5Address) :
+      await socks5Connect(addressType, addressRemote, portRemote, log, config.socks5.parsed) :
       connect(options);
     remoteSocket.value = tcpSocket;
     log(`Connected to ${address}:${port}`);
@@ -408,29 +410,33 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
   }
 
   const connectWithFallback = async () => {
-    if (config.enableSocks) {
+    // Primary connection: SOCKS5 if enabled
+    if (config.socks5.enabled) {
       try {
-        return await connectAndWrite(config.parsedSocks5Address.hostname, config.parsedSocks5Address.port, true);
+        return await connectAndWrite(config.socks5.parsed.hostname, config.socks5.parsed.port, true);
       } catch (err) {
         log(`SOCKS5 connection failed: ${err.message}`, err);
-        throw err;
+        // If SOCKS fails, do not fall back to direct connection for security reasons.
+        throw new Error(`SOCKS5 proxy connection failed. Aborting.`);
       }
     }
 
+    // Primary connection: Direct connection
     try {
       return await connectAndWrite(addressRemote, portRemote, false);
     } catch (err) {
       log(`Direct connection to ${addressRemote}:${portRemote} failed: ${err.message}`, err);
+      // Fallback: Use proxyIP if direct connection fails
       if (config.proxyIP) {
         log(`Falling back to proxy: ${config.proxyIP}:${config.proxyPort}`);
         try {
           return await connectAndWrite(config.proxyIP, parseInt(config.proxyPort), false);
         } catch (fallbackErr) {
           log(`Fallback connection failed: ${fallbackErr.message}`, fallbackErr);
-          throw fallbackErr;
+          throw fallbackErr; // Throw the fallback error
         }
       }
-      throw err;
+      throw err; // Re-throw original error if no proxyIP is configured
     }
   };
 
@@ -438,7 +444,7 @@ async function handleTCPOutBound(remoteSocket, addressType, addressRemote, portR
     const tcpSocket = await connectWithFallback();
     remoteSocketToWS(tcpSocket, webSocket, vlessResponseHeader, log);
   } catch (error) {
-    log(`Failed to establish outbound connection: ${error.message}`, error);
+    log(`Failed to establish outbound connection: ${error.message}`, error.stack);
     safeCloseWebSocket(webSocket);
   }
 }
@@ -482,7 +488,7 @@ async function handleAdminRoutes(request, cfg) {
           status: 302,
           headers: {
             'Location': '/admin/dashboard',
-            'Set-Cookie': `${CONST.ADMIN_COOKIE_NAME}=${cfg.adminKey}; Path=/; HttpOnly; Secure; SameSite=Strict`,
+            'Set-Cookie': `${CONST.ADMIN_COOKIE_NAME}=${cfg.adminKey}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=86400`, // Cookie for 1 day
           },
         });
       }
@@ -510,6 +516,7 @@ async function handleAdminRoutes(request, cfg) {
     if (cookie && cookie.includes(`${CONST.ADMIN_COOKIE_NAME}=${cfg.adminKey}`)) {
       return new Response(getAdminDashboardPage(), { headers: { 'Content-Type': 'text/html' } });
     }
+    // Redirect to login if not authenticated
     return new Response(null, { status: 302, headers: { 'Location': '/admin/login' } });
   }
 
@@ -524,12 +531,13 @@ async function handleAdminRoutes(request, cfg) {
  */
 async function handleAdminApi(request, cfg) {
   const { pathname } = new URL(request.url);
+  const headers = { 'Content-Type': 'application/json' };
 
   try {
     // GET /admin/api/users
     if (request.method === 'GET' && pathname === '/admin/api/users') {
       const { results } = await cfg.db.prepare('SELECT id, expiration, status, notes FROM users ORDER BY expiration DESC').all();
-      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify(results), { headers });
     }
 
     // POST /admin/api/users (Create)
@@ -538,11 +546,11 @@ async function handleAdminApi(request, cfg) {
       const newUuid = crypto.randomUUID();
       const expirationTimestamp = expiration ? new Date(expiration).getTime() : null;
 
-      await cfg.db.prepare('INSERT INTO users (id, expiration, notes) VALUES (?, ?, ?)')
-        .bind(newUuid, expirationTimestamp, notes)
+      await cfg.db.prepare('INSERT INTO users (id, expiration, notes, status) VALUES (?, ?, ?, ?)')
+        .bind(newUuid, expirationTimestamp, notes, 'active')
         .run();
 
-      return new Response(JSON.stringify({ id: newUuid, expiration: expirationTimestamp, notes }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ id: newUuid, expiration: expirationTimestamp, notes, status: 'active' }), { status: 201, headers });
     }
 
     // PUT /admin/api/users/:id (Update)
@@ -559,7 +567,7 @@ async function handleAdminApi(request, cfg) {
       // Invalidate cache for the updated user
       await cfg.kv.delete(`user-status:${userId}`);
 
-      return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ success: true }), { headers });
     }
 
     // DELETE /admin/api/users/:id (Delete)
@@ -572,11 +580,11 @@ async function handleAdminApi(request, cfg) {
       return new Response(null, { status: 204 });
     }
 
-    return new Response(JSON.stringify({ error: 'API route not found' }), { status: 404, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: 'API route not found' }), { status: 404, headers });
 
   } catch (error) {
-    console.error('Admin API error:', error);
-    return new Response(JSON.stringify({ error: 'Internal Server Error', details: error.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    console.error('Admin API error:', error.stack || error);
+    return new Response(JSON.stringify({ error: 'Internal Server Error', details: error.message }), { status: 500, headers });
   }
 }
 
@@ -594,9 +602,9 @@ function getAdminLoginPage(error = false) {
   <title>Admin Login</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #1a1a1a; color: #e0e0e0; }
-    .login-container { background-color: #2c2c2c; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; }
+    .login-container { background-color: #2c2c2c; padding: 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 350px; }
     h1 { margin-bottom: 24px; color: #fff; }
-    input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #555; background-color: #333; color: #fff; font-size: 16px; }
+    input { width: 100%; padding: 12px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #555; background-color: #333; color: #fff; font-size: 16px; box-sizing: border-box; }
     button { width: 100%; padding: 12px; border: none; border-radius: 4px; background-color: #007aff; color: white; font-size: 16px; cursor: pointer; transition: background-color 0.2s; }
     button:hover { background-color: #0056b3; }
     .error { color: #ff4d4d; margin-top: -10px; margin-bottom: 10px; }
@@ -631,7 +639,8 @@ function getAdminDashboardPage() {
     .modal-content { background-color: var(--surface); padding: 20px; border-radius: 8px; width: 90%; max-width: 500px; }
     .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; }
     .close-btn { font-size: 28px; font-weight: bold; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; min-width: 800px; }
     th, td { padding: 12px; border: 1px solid var(--border); text-align: left; font-size: 0.9em; }
     th { background-color: #333; }
     td { word-break: break-all; }
@@ -651,12 +660,14 @@ function getAdminDashboardPage() {
 <div class="container">
     <h1><span>User Management</span> <a href="/admin/logout" class="logout">Logout</a></h1>
     <button class="btn-add" id="addUserBtn">Add New User</button>
-    <table>
-        <thead>
-            <tr><th>UUID</th><th>Expiration</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
-        </thead>
-        <tbody id="user-table-body"></tbody>
-    </table>
+    <div class="table-wrapper">
+      <table>
+          <thead>
+              <tr><th>UUID</th><th>Expiration</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="user-table-body"></tbody>
+      </table>
+    </div>
 </div>
 
 <div id="userModal" class="modal">
@@ -671,7 +682,7 @@ function getAdminDashboardPage() {
             <textarea id="userNotes" rows="3"></textarea>
             <label for="userExpiration">Expiration (optional):</label>
             <input type="datetime-local" id="userExpiration">
-            <label for="userStatus">Status:</label>
+            <label for="userStatus" id="statusLabel">Status:</label>
             <select id="userStatus">
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -696,7 +707,7 @@ function getAdminDashboardPage() {
     addUserBtn.onclick = () => {
         modalTitle.textContent = 'Add New User';
         document.getElementById('userStatus').style.display = 'none';
-        document.querySelector('label[for="userStatus"]').style.display = 'none';
+        document.getElementById('statusLabel').style.display = 'none';
         openModal();
     };
     closeBtn.onclick = closeModal;
@@ -730,10 +741,10 @@ function getAdminDashboardPage() {
         document.getElementById('userId').value = id;
         document.getElementById('userNotes').value = notes;
         const expDate = expiration ? new Date(parseInt(expiration)) : null;
-        document.getElementById('userExpiration').value = expDate ? expDate.toISOString().slice(0, 16) : '';
+        document.getElementById('userExpiration').value = expDate ? new Date(expDate.getTime() - (expDate.getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : '';
         document.getElementById('userStatus').value = status;
         document.getElementById('userStatus').style.display = 'block';
-        document.querySelector('label[for="userStatus"]').style.display = 'block';
+        document.getElementById('statusLabel').style.display = 'block';
         openModal();
     }
 
@@ -765,7 +776,7 @@ function getAdminDashboardPage() {
             fetchUsers();
         } else {
             const error = await response.json();
-            alert('Error: ' + error.details);
+            alert('Error: ' + (error.details || error.error));
         }
     };
 
@@ -777,8 +788,6 @@ function getAdminDashboardPage() {
 
 
 // --- USER CONFIG PAGE HTML/CSS/JS ---
-// The functions getPageCSS, getPageHTML, getPageScript, generateBeautifulConfigPage
-// are taken from the user's provided script and are used here.
 function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
   const dream = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
@@ -801,7 +810,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
   };
 
-  return `
+  return new Response(`
   <!doctype html>
   <html lang="en">
   <head>
@@ -817,7 +826,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
     ${getPageHTML(configs, clientUrls)}
     <script>${getPageScript()}</script>
   </body>
-  </html>`;
+  </html>`, { headers: { 'Content-Type': 'text/html;charset=UTF-8' } });
 }
 
 function getPageCSS() {
@@ -986,20 +995,22 @@ function getPageScript() {
           const proxyGeo = await fetchIpInfo(proxyDomain);
           updateDisplay('proxy', proxyGeo);
         }
-        const clientIpData = await fetch('https://api.ipify.org?format=json').then(r => r.json());
-        if (clientIpData.ip) {
-            const clientGeo = await fetchIpInfo(clientIpData.ip);
-            updateDisplay('client', clientGeo);
-            const scamData = await fetchScamalytics(clientIpData.ip);
-            if(scamData && scamData.scamalytics && scamData.scamalytics.score) {
-              const { score, risk } = scamData.scamalytics;
-              let badgeClass = 'neutral';
-              if (risk === 'low') badgeClass = 'yes';
-              else if (risk === 'medium') badgeClass = 'warning';
-              else if (risk === 'high' || risk === 'very high') badgeClass = 'no';
-              document.getElementById('client-proxy').innerHTML = \`<span class="badge badge-\${badgeClass}">\${score} - \${risk}</span>\`;
-            }
-        }
+        try {
+          const clientIpData = await fetch('https://api.ipify.org?format=json').then(r => r.json());
+          if (clientIpData.ip) {
+              const clientGeo = await fetchIpInfo(clientIpData.ip);
+              updateDisplay('client', clientGeo);
+              const scamData = await fetchScamalytics(clientIpData.ip);
+              if(scamData && scamData.scamalytics && scamData.scamalytics.score) {
+                const { score, risk } = scamData.scamalytics;
+                let badgeClass = 'neutral';
+                if (risk === 'low') badgeClass = 'yes';
+                else if (risk === 'medium') badgeClass = 'warning';
+                else if (risk === 'high' || risk === 'very high') badgeClass = 'no';
+                document.getElementById('client-proxy').innerHTML = \`<span class="badge badge-\${badgeClass}">\${score} - \${risk}</span>\`;
+              }
+          }
+        } catch(e) { console.error('Could not fetch client IP info', e); }
       }
       document.getElementById('refresh-ip-info').addEventListener('click', loadNetworkInfo);
       document.addEventListener('DOMContentLoaded', loadNetworkInfo);
@@ -1009,7 +1020,6 @@ function getPageScript() {
 // =================================================================================
 // === UTILITY & HELPER FUNCTIONS ==================================================
 // =================================================================================
-// These are mostly from the original script provided by the user.
 
 /**
  * Handles the Scamalytics API lookup for the user page.
@@ -1066,7 +1076,6 @@ async function handleIpSubscription(core, userID, hostName) {
 
 
 function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
-  let readableStreamCancel = false;
   return new ReadableStream({
     start(controller) {
       webSocketServer.addEventListener('message', event => controller.enqueue(event.data));
@@ -1079,13 +1088,14 @@ function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
     pull() {},
     cancel(reason) {
       log(`ReadableStream was canceled, due to ${reason}`);
-      safeCloseWebSocket(webSocketServer);
+      if (webSocketServer.readyState === CONST.WS_READY_STATE_OPEN) {
+        safeCloseWebSocket(webSocketServer);
+      }
     }
   });
 }
 
 async function remoteSocketToWS(remoteSocket, webSocket, vlessResponseHeader, log) {
-  let hasIncomingData = false;
   try {
     await remoteSocket.readable.pipeTo(
       new WritableStream({
@@ -1094,27 +1104,19 @@ async function remoteSocketToWS(remoteSocket, webSocket, vlessResponseHeader, lo
             webSocket.send(vlessResponseHeader);
           }
         },
-        async write(chunk, controller) {
+        async write(chunk) {
           if (webSocket.readyState !== CONST.WS_READY_STATE_OPEN) {
-            controller.error('WebSocket connection is not open');
+            throw new Error('WebSocket connection is not open');
           }
-          hasIncomingData = true;
           webSocket.send(chunk);
         },
-        close() {
-          log(`remoteSocketToWS pipe closed`);
-        },
-        abort(err) {
-          log(`remoteSocketToWS pipe aborted`, err);
-        },
+        close: () => log(`remoteSocketToWS pipe closed`),
+        abort: err => log(`remoteSocketToWS pipe aborted`, err.stack || err),
       })
     );
   } catch (error) {
     log('remoteSocketToWS error:', error.stack || error);
   } finally {
-    if (!hasIncomingData) {
-      log('No incoming data from remoteSocket, closing WebSocket');
-    }
     safeCloseWebSocket(webSocket);
   }
 }
@@ -1124,10 +1126,13 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
   const transformStream = new TransformStream({
     transform(chunk, controller) {
       for (let index = 0; index < chunk.byteLength;) {
+        if (index + 2 > chunk.byteLength) break;
         const lengthBuffer = chunk.slice(index, index + 2);
         const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
-        controller.enqueue(new Uint8Array(chunk.slice(index + 2, index + 2 + udpPacketLength)));
-        index += 2 + udpPacketLength;
+        const packetEnd = index + 2 + udpPacketLength;
+        if (packetEnd > chunk.byteLength) break;
+        controller.enqueue(new Uint8Array(chunk.slice(index + 2, packetEnd)));
+        index = packetEnd;
       }
     },
   });
@@ -1144,15 +1149,14 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
         const sizeBuffer = new Uint8Array([(dnsResult.byteLength >> 8) & 0xff, dnsResult.byteLength & 0xff]);
         if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
           const dataToSend = isHeaderSent ? [sizeBuffer, dnsResult] : [vlessResponseHeader, sizeBuffer, dnsResult];
-          webSocket.send(await new Blob(dataToSend).arrayBuffer());
+          webSocket.send(new Blob(dataToSend));
           isHeaderSent = true;
         }
-      } catch (e) { log('DNS query error: ' + e); }
+      } catch (e) { log('DNS query error: ', e.stack || e); }
     },
-  })).catch(e => { log('DNS stream error: ' + e); });
+  })).catch(e => { log('DNS stream error: ', e.stack || e); });
 
-  const writer = transformStream.writable.getWriter();
-  return { write: chunk => writer.write(chunk) };
+  return transformStream.writable.getWriter();
 }
 
 async function socks5Connect(addressType, addressRemote, portRemote, log, parsedSocks5Addr) {
@@ -1162,16 +1166,20 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
   const reader = socket.readable.getReader();
   const encoder = new TextEncoder();
 
-  await writer.write(new Uint8Array([5, 2, 0, 2])); // Greeting
+  await writer.write(new Uint8Array([5, 1, 0])); // Version 5, 1 auth method, no-auth
   let res = (await reader.read()).value;
-  if (res[0] !== 0x05 || res[1] === 0xff) throw new Error('SOCKS5 connection failed.');
-
-  if (res[1] === 0x02) { // Auth required
-    if (!username || !password) throw new Error('SOCKS5 auth required but not provided.');
-    const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
-    await writer.write(authRequest);
+  if (res[0] !== 0x05 || res[1] !== 0x00) {
+    // try auth
+    await writer.write(new Uint8Array([5, 2, 0, 2])); // Greeting
     res = (await reader.read()).value;
-    if (res[0] !== 0x01 || res[1] !== 0x00) throw new Error('SOCKS5 authentication failed.');
+    if (res[0] !== 0x05 || res[1] === 0xff) throw new Error('SOCKS5 auth negotiation failed.');
+    if (res[1] === 0x02) { // Auth required
+        if (!username || !password) throw new Error('SOCKS5 auth required but not provided.');
+        const authRequest = new Uint8Array([1, username.length, ...encoder.encode(username), password.length, ...encoder.encode(password)]);
+        await writer.write(authRequest);
+        res = (await reader.read()).value;
+        if (res[0] !== 0x01 || res[1] !== 0x00) throw new Error('SOCKS5 authentication failed.');
+    }
   }
   
   let DSTADDR;
@@ -1184,7 +1192,7 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
 
   await writer.write(new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]));
   res = (await reader.read()).value;
-  if (res[1] !== 0x00) throw new Error('Failed to establish SOCKS5 connection.');
+  if (res[1] !== 0x00) throw new Error(`SOCKS5 connection failed, status: ${res[1]}`);
 
   writer.releaseLock();
   reader.releaseLock();
@@ -1192,16 +1200,16 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
 }
 
 function socks5AddressParser(address) {
-  try {
-    const [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
-    const [hostname, portStr] = hostPart.split(':');
+    const match = address.match(/^(?:(.+?):(.+?)@)?([^:]+):(\d+)$/);
+    if (!match) {
+        throw new Error('Invalid SOCKS5 address format. Expected [user:pass@]host:port');
+    }
+    const [, username, password, hostname, portStr] = match;
     const port = parseInt(portStr, 10);
-    if (!hostname || isNaN(port)) throw new Error();
-    const [username, password] = authPart ? authPart.split(':') : [null, null];
+    if (isNaN(port) || port < 1 || port > 65535) {
+        throw new Error('Invalid port number in SOCKS5 address.');
+    }
     return { username, password, hostname, port };
-  } catch {
-    throw new Error('Invalid SOCKS5 address. Expected [user:pass@]host:port');
-  }
 }
 
 function base64ToArrayBuffer(base64Str) {
@@ -1219,10 +1227,10 @@ function base64ToArrayBuffer(base64Str) {
 
 function safeCloseWebSocket(socket) {
   try {
-    if (socket.readyState === CONST.WS_READY_STATE_OPEN || socket.readyState === CONST.WS_READY_STATE_CLOSING) {
+    if (socket && (socket.readyState === CONST.WS_READY_STATE_OPEN || socket.readyState === CONST.WS_READY_STATE_CLOSING)) {
       socket.close();
     }
-  } catch (error) { console.error('safeCloseWebSocket error:', error); }
+  } catch (error) { console.error('safeCloseWebSocket error:', error.stack || error); }
 }
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
@@ -1243,7 +1251,7 @@ function generateRandomPath(length = 12, query = '') {
 
 const CORE_PRESETS = {
   xray: { tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls', fp: 'chrome', alpn: 'http/1.1' } },
-  sb: { tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h3', extra: { ed: 2560, eh: 'Sec-WebSocket-Protocol' } } },
+  sb: { tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h2,http/1.1', extra: {} } },
 };
 
 function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, extra = {}, name }) {
