@@ -241,19 +241,20 @@ async function handleSubscription(uuid, hostname, proxyIP) {
         '104.16.132.229', '104.17.210.99', '104.21.2.194', '172.67.134.136',
         '172.64.80.1', '172.67.74.228', '172.67.218.15'
     ];
-    const addresses = [
-        hostname, 
-        'www.speedtest.net',
-        proxyIP,
-        ...cleanIPs
-    ].filter((v, i, a) => a.indexOf(v) === i); 
 
     let links = [];
-    const path = `/${uuid.slice(0, 8)}?ed=2048`;
+    // **FIXED**: Use a simplified path without query parameters for better compatibility.
+    const path = `/${uuid.slice(0, 8)}`;
 
-    addresses.forEach((address, i) => {
-        const name = `${address.substring(0, 15)}-${i}`;
-        const vlessLink = `vless://${uuid}@${address}:443?type=ws&host=${hostname}&path=${encodeURIComponent(path)}&security=tls&sni=${hostname}&fp=chrome#${encodeURIComponent(name)}`;
+    // 1. Add a direct link using the worker's hostname.
+    const directName = `${hostname.substring(0, 15)}-direct`;
+    const directLink = `vless://${uuid}@${hostname}:443?type=ws&host=${hostname}&path=${encodeURIComponent(path)}&security=tls&sni=${hostname}&fp=chrome#${encodeURIComponent(directName)}`;
+    links.push(directLink);
+
+    // 2. Add links for each clean IP. This is the most reliable method.
+    cleanIPs.forEach((ip, i) => {
+        const name = `CF-IP-${i}`;
+        const vlessLink = `vless://${uuid}@${ip}:443?type=ws&host=${hostname}&path=${encodeURIComponent(path)}&security=tls&sni=${hostname}&fp=chrome#${encodeURIComponent(name)}`;
         links.push(vlessLink);
     });
     
@@ -262,7 +263,8 @@ async function handleSubscription(uuid, hostname, proxyIP) {
 
 
 function handleUserConfigPage(uuid, hostname, proxyIP, expirationTimestamp) {
-	const path = `/${uuid.split('-')[0]}?ed=2048`;
+	// **FIXED**: Use a simplified path consistent with the subscription function.
+	const path = `/${uuid.split('-')[0]}`;
 	const configLink = `vless://${uuid}@${proxyIP}:443?type=ws&host=${hostname}&path=${encodeURIComponent(path)}&security=tls&sni=${hostname}&fp=chrome#${hostname}`;
 	const subLink = `https://${hostname}/sub/${uuid}`;
 	const html = getUserPageHTML(configLink, subLink, expirationTimestamp);
