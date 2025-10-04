@@ -54,7 +54,7 @@ const Config = {
         relayMode: env.SOCKS5_RELAY === 'true' || this.socks5.relayMode,
         address: env.SOCKS5 || this.socks5.address,
       },
-      adminKey: env.ADMIN_KEY || 'default_admin_key', // Advanced: Admin key from env
+      adminKey: env.ADMIN_KEY, // Changed: No default, must be set in env for admin to work
       db: env.DB, // Advanced: D1 binding
       kv: env.KV, // Advanced: KV binding
       dohUpstreamUrl: env.DOH_UPSTREAM_URL || this.dohUpstreamUrl, // Advanced: DoH from env
@@ -228,6 +228,9 @@ async function validateUser(uuid, cfg) {
  * @returns {Promise<Response>}
  */
 async function handleAdminRoutes(request, cfg) {
+  if (!cfg.adminKey) {
+    return new Response('Admin panel disabled', { status: 403 }); // Disable if no key set
+  }
   const url = new URL(request.url);
   const authHeader = request.headers.get('Authorization');
   if (authHeader !== `Bearer ${cfg.adminKey}`) {
