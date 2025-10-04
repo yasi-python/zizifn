@@ -107,7 +107,7 @@ async function getAndCacheUser(uuid, db, cache) {
 			const isActive = result.status === 'active';
 			isValid = isActive && !isExpired;
 		}
-		const cacheValue = `${isValid ? 'valid' 'invalid'}:${expirationTimestamp || 0}`;
+		const cacheValue = `${isValid ? 'valid' : 'invalid'}:${expirationTimestamp || 0}`;
 		await cache.put(`uuid-status:${uuid}`, cacheValue, { expirationTtl: 300 });
 		return { isValid, expirationTimestamp };
 	} catch (error) {
@@ -133,7 +133,7 @@ async function handleVlessWebSocket(request, cfg) {
 			if (!user || !user.isValid) throw new Error(`User with UUID ${uuid} is invalid, expired, or inactive.`);
 			address = addressRemote;
 			portWithRandomLog = `${portRemote}--${Math.random().toString(36).slice(2, 8)}`;
-			log(`${isUDP ? 'UDP' 'TCP'} request`);
+			log(`${isUDP ? 'UDP' : 'TCP'} request`);
 			const vlessResponseHeader = new Uint8Array([vlessVersion[0], 0]);
 			const rawClientData = chunk.slice(rawDataIndex);
 			if (isUDP) throw new Error('UDP proxying is not supported.');
