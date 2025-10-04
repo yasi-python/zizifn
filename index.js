@@ -16,13 +16,13 @@
 // - English comments for clarity.
 // - Fixed Hiddify connection: Limited to port 443 for TLS on clean IPs/domains.
 // - Intelligent retry with logging.
-// - Fixed handshake failure by using valid backend proxy IPs.
+// - Fixed handshake failure by using valid backend proxy IPs from tested list.
 
 import { connect } from 'cloudflare:sockets';
 
 // --- CONFIGURATION ---
 const Config = {
-  proxyIPs: ['nima.nscl.ir:443'], // Valid backend from first script.
+  proxyIPs: ['nima.nscl.ir:443', 'turk.radicalization.ir:443', 'bpb.yousef.isegaro.com:443', 'proxyip.cmliussss.net:443'], // Valid backends from tested list for failover.
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
@@ -560,20 +560,20 @@ function getPageCSS() {
         box-sizing: border-box;
       }
       @font-face {
-      font-family: "Aldine 401 BT Web";
-      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
-      font-weight: 400; font-style: normal; font-display: swap;
-    }
-    @font-face {
-      font-family: "Styrene B LC";
-      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
-      font-weight: 400; font-style: normal; font-display: swap;
-    }
-    @font-face {
-      font-family: "Styrene B LC";
-      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
-      font-weight: 500; font-style: normal; font-display: swap;
-    }
+	      font-family: "Aldine 401 BT Web";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
+	      font-weight: 400; font-style: normal; font-display: swap;
+	    }
+	    @font-face {
+	      font-family: "Styrene B LC";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
+	      font-weight: 400; font-style: normal; font-display: swap;
+	    }
+	    @font-face {
+	      font-family: "Styrene B LC";
+	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
+	      font-weight: 500; font-style: normal; font-display: swap;
+	    }
       :root {
         --background-primary: #2a2421; --background-secondary: #35302c; --background-tertiary: #413b35;
         --border-color: #5a4f45; --border-color-hover: #766a5f; --text-primary: #e5dfd6; --text-secondary: #b3a89d;
@@ -583,9 +583,9 @@ function getPageCSS() {
         --border-radius: 8px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
         --status-success: #70b570; --status-error: #e05d44; --status-warning: #e0bc44; --status-info: #4f90c4;
         --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
-      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
-      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
-    }
+	      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
+	      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
+	    }
       body {
         font-family: var(--sans-serif); font-size: 16px; font-weight: 400; font-style: normal;
         background-color: var(--background-primary); color: var(--text-primary);
@@ -688,73 +688,73 @@ function getPageCSS() {
       .client-btn:hover .client-icon { transform: rotate(15deg) scale(1.1); }
       .client-btn .button-text { position: relative; z-index: 2; transition: letter-spacing 0.3s ease; }
       .client-btn:hover .button-text { letter-spacing: 0.5px; }
-    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
-    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
-    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
-    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
-    .footer p { margin-bottom: 0px; }
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
-    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
-    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
-    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
-    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
-    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
-    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
-    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
-    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
-    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
-    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
-    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
-    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
-    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
-    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
-    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
-    @media (max-width: 768px) {
-      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
-      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
-      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
-      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
-      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
-      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
-      .config-card { padding: 16px; } .config-title { font-size: 18px; }
-      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
-      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
-    }
-    @media (max-width: 480px) {
-      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
-      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
-      .ip-info-section { padding: 14px; gap: 16px; }
-      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; }
-      .ip-info-content { gap: 6px; } .ip-info-header svg { width: 18px; height: 18px; }
-      .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
-      .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
-      .config-card { padding: 10px; } .config-title { font-size: 16px; }
-      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
-      .config-content pre { font-size: 10px; }
-      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
-      .footer { font-size: 10px; }
-    }
-    @media (max-width: 359px) {
+	    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+	    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
+	    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
+	    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
+	    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
+	    .footer p { margin-bottom: 0px; }
+	    ::-webkit-scrollbar { width: 8px; height: 8px; }
+	    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
+	    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
+	    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
+	    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
+	    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
+	    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
+	    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+	    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
+	    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
+	    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
+	    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
+	    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+	    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
+	    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+	    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
+	    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
+	    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
+	    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
+	    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
+	    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+	    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+	    @media (max-width: 768px) {
+	      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
+	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
+	      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
+	      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
+	      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
+	      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
+	      .config-card { padding: 16px; } .config-title { font-size: 18px; }
+	      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
+	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+	      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
+	    }
+	    @media (max-width: 480px) {
+	      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
+	      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
+	      .ip-info-section { padding: 14px; gap: 16px; }
+	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; }
+	      .ip-info-content { gap: 6px; } .ip-info-header svg { width: 18px; height: 18px; }
+	      .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
+	      .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
+	      .config-card { padding: 10px; } .config-title { font-size: 16px; }
+	      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
+	      .config-content pre { font-size: 10px; }
+	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
+	      .footer { font-size: 10px; }
+	    }
+	    @media (max-width: 359px) {
           body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
           .header h1 { font-size: 16px; } .header p { font-size: 6px; }
           .ip-info-section { padding: 12px; gap: 12px; }
-          .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+          .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
           .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
           .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
-  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
+		  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
           .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
           .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
-  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+		  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
           .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
         }
     
@@ -766,6 +766,11 @@ function getPageCSS() {
   `;
 }
 
+/**
+ * @param {object} configs - Object containing configuration links.
+ * @param {object} clientUrls - Object containing client URLs.
+ * @returns {string} The HTML body content of the page.
+ */
 function getPageHTML(configs, clientUrls) {
   return `
     <div class="container">
