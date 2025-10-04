@@ -233,6 +233,28 @@ async function handleAdminRoutes(request, cfg) {
   }
   const url = new URL(request.url);
   const authHeader = request.headers.get('Authorization');
+
+  if (url.pathname === '/admin/login') {
+    // No auth required for login page
+    return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html' } });
+  }
+
+  if (url.pathname === '/admin/api/login') {
+    // Handle login POST
+    if (request.method === 'POST') {
+      const formData = await request.formData();
+      const key = formData.get('key');
+      if (key === cfg.adminKey) {
+        // In a real scenario, generate a token or session. Here, just return success.
+        return new Response('Login successful. Use Bearer token in API calls.', { status: 200 });
+      } else {
+        return new Response('Invalid key', { status: 401 });
+      }
+    }
+    return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  // For other admin routes, require auth
   if (authHeader !== `Bearer ${cfg.adminKey}`) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -255,11 +277,6 @@ async function handleAdminRoutes(request, cfg) {
       await cfg.kv.delete(`user:${body.uuid}`);
       return new Response('User deleted', { status: 200 });
     }
-  }
-
-  if (url.pathname === '/admin/login') {
-    // Simple login page (embedded)
-    return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html' } });
   }
 
   if (url.pathname === '/admin/dashboard') {
@@ -285,6 +302,20 @@ function getAdminLoginHTML() {
         <input type="password" name="key" placeholder="Admin Key">
         <button type="submit">Login</button>
       </form>
+      <script>
+        // After login, store key in localStorage for dashboard
+        document.querySelector('form').addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          const response = await fetch('/admin/api/login', { method: 'POST', body: formData });
+          if (response.ok) {
+            localStorage.setItem('adminKey', formData.get('key'));
+            window.location.href = '/admin/dashboard';
+          } else {
+            alert('Invalid key');
+          }
+        });
+      </script>
     </body>
     </html>
   `;
@@ -305,7 +336,19 @@ function getAdminDashboardHTML() {
       <button onclick="fetchUsers()">Load Users</button>
       <script>
         async function fetchUsers() {
-          const res = await fetch('/admin/api/users', { headers: { 'Authorization': 'Bearer ' + localStorage.adminKey } });
+          const key = localStorage.getItem('adminKey');
+          if (!key) {
+            alert('Please login first');
+            window.location.href = '/admin/login';
+            return;
+          }
+          const res = await fetch('/admin/api/users', { headers: { 'Authorization': \`Bearer \${key}\` } });
+          if (!res.ok) {
+            alert('Unauthorized. Please login again.');
+            localStorage.removeItem('adminKey');
+            window.location.href = '/admin/login';
+            return;
+          }
           const users = await res.json();
           document.getElementById('users').innerHTML = users.map(u => '<p>' + u.id + '</p>').join('');
         }
