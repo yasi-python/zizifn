@@ -234,50 +234,77 @@ async function validateUser(uuid, cfg) {
  */
 async function handleAdminRoutes(request, cfg) {
     const url = new URL(request.url);
+    const jsonHeaders = { 'Content-Type': 'application/json' };
 
-    // First, handle the public login page. No auth is needed to view it.
+    // Publicly accessible HTML pages
     if (url.pathname === '/admin/login') {
         return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html' } });
     }
-
-    // For all other admin routes, perform security checks.
-    if (!cfg.adminKey) {
-        return new Response('Admin panel disabled. Set ADMIN_KEY in your environment variables.', { status: 403 });
-    }
-    const authHeader = request.headers.get('Authorization');
-    if (authHeader !== `Bearer ${cfg.adminKey}`) {
-        return new Response('Unauthorized', { status: 401 });
-    }
-
-    // If authentication is successful, handle the protected routes.
     if (url.pathname === '/admin/dashboard') {
         return new Response(getAdminDashboardHTML(), { headers: { 'Content-Type': 'text/html' } });
     }
 
-    if (url.pathname === '/admin/api/users') {
-        if (!cfg.db) return new Response('Database is not configured.', { status: 500 });
+    // Protected API routes start here
+    if (url.pathname.startsWith('/admin/api/')) {
+        // First, perform security checks for all API routes
+        if (!cfg.adminKey) {
+            const error = { error: 'Admin panel is disabled. Set ADMIN_KEY in your environment variables.' };
+            return new Response(JSON.stringify(error), { status: 403, headers: jsonHeaders });
+        }
+        const authHeader = request.headers.get('Authorization');
+        if (authHeader !== `Bearer ${cfg.adminKey}`) {
+            const error = { error: 'Unauthorized' };
+            return new Response(JSON.stringify(error), { status: 401, headers: jsonHeaders });
+        }
 
-        if (request.method === 'GET') {
-            const { results } = await cfg.db.prepare('SELECT * FROM users').all();
-            return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-        } else if (request.method === 'POST') {
-            const body = await request.json();
-            const uuid = crypto.randomUUID(); // Generate new UUID
-            await cfg.db.prepare('INSERT INTO users (id, expiration, status, notes) VALUES (?, ?, ?, ?)')
-                .bind(uuid, body.expiration, body.status || 'active', body.notes || '')
-                .run();
-            await cfg.kv.put(`user:${uuid}`, 'valid', { expirationTtl: 3600 });
-            return new Response(JSON.stringify({ id: uuid }), { status: 201 }); // Return the new user object
-        } else if (request.method === 'DELETE') {
-            const body = await request.json();
-            await cfg.db.prepare('DELETE FROM users WHERE id = ?').bind(body.uuid).run();
-            await cfg.kv.delete(`user:${body.uuid}`);
-            return new Response('User deleted', { status: 200 });
+        // --- Handle specific API routes after successful authentication ---
+        
+        if (url.pathname === '/admin/api/users') {
+            if (!cfg.db) {
+                const error = { error: 'Database is not configured.' };
+                return new Response(JSON.stringify(error), { status: 500, headers: jsonHeaders });
+            }
+
+            try {
+                if (request.method === 'GET') {
+                    const { results } = await cfg.db.prepare('SELECT * FROM users').all();
+                    return new Response(JSON.stringify(results || []), { headers: jsonHeaders });
+                } 
+                
+                if (request.method === 'POST') {
+                    const body = await request.json();
+                    const uuid = crypto.randomUUID();
+                    await cfg.db.prepare('INSERT INTO users (id, expiration, status, notes) VALUES (?, ?, ?, ?)')
+                        .bind(uuid, body.expiration, body.status || 'active', body.notes || '')
+                        .run();
+                    await cfg.kv.put(`user:${uuid}`, 'valid', { expirationTtl: 3600 });
+                    return new Response(JSON.stringify({ id: uuid, status: 'created' }), { status: 201, headers: jsonHeaders });
+                } 
+                
+                if (request.method === 'DELETE') {
+                    const body = await request.json();
+                    if (!body.uuid) {
+                        return new Response(JSON.stringify({ error: 'UUID is required for deletion.' }), { status: 400, headers: jsonHeaders });
+                    }
+                    await cfg.db.prepare('DELETE FROM users WHERE id = ?').bind(body.uuid).run();
+                    await cfg.kv.delete(`user:${body.uuid}`);
+                    return new Response(JSON.stringify({ id: body.uuid, status: 'deleted' }), { status: 200, headers: jsonHeaders });
+                }
+
+                // If method is not supported
+                return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405, headers: jsonHeaders });
+
+            } catch (e) {
+                const error = { error: 'An API error occurred.', details: e.message };
+                return new Response(JSON.stringify(error), { status: 500, headers: jsonHeaders });
+            }
         }
     }
 
+    // Fallback for any other route under /admin/ that is not found
     return new Response('Admin route not found', { status: 404 });
 }
+
 
 /**
  * Embedded Admin Login HTML
@@ -356,9 +383,11 @@ function getAdminDashboardHTML() {
                alert('Unauthorized. The key may be incorrect.');
                localStorage.removeItem('adminKey');
                window.location.href = '/admin/login';
-               return;
+               return Promise.reject(new Error('Unauthorized'));
             }
-            if (!res.ok) throw new Error('Failed to load users');
+            if (!res.ok) {
+               return res.json().then(err => Promise.reject(err));
+            }
             return res.json();
           })
           .then(users => {
@@ -370,7 +399,9 @@ function getAdminDashboardHTML() {
             }
           })
           .catch(err => {
-            document.getElementById('users').innerHTML = '<p style="color: red;">Error: ' + err.message + '</p>';
+            console.error('Dashboard Error:', err);
+            const errorMessage = err.error || err.message || 'An unknown error occurred.';
+            document.getElementById('users').innerHTML = '<p style="color: red;">Error: ' + errorMessage + '</p>';
           });
         });
       </script>
