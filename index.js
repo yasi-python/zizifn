@@ -134,7 +134,7 @@ export default {
     if (uuidMatch) {
       userId = uuidMatch[1];
       if (await authenticateUser(userId, cfg)) {
-        return handleConfigPage(userId, url.hostname, cfg.proxyAddress);
+        return generateBeautifulConfigPage(userId, url.hostname, cfg.proxyAddress);
       }
     } else if (subscriptionMatch) {
       const core = subscriptionMatch[1];
@@ -147,7 +147,7 @@ export default {
         const defaultUsers = cfg.defaultUserID.split(',').map(id => id.trim());
         for (const defaultId of defaultUsers) {
             if (url.pathname.startsWith(`/${defaultId}`)) {
-                return handleConfigPage(defaultId, url.hostname, cfg.proxyAddress);
+                return generateBeautifulConfigPage(defaultId, url.hostname, cfg.proxyAddress);
             }
              if (url.pathname.startsWith(`/xray/${defaultId}`)) {
                  return handleIpSubscription('xray', defaultId, url.hostname);
