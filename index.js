@@ -206,7 +206,12 @@ async function handleIpSubscription(core, userID, hostName) {
  * @returns {Promise<boolean>}
  */
 async function validateUser(uuid, cfg) {
-  if (!cfg.db || !cfg.kv) return isValidUUID(uuid); // Fallback if no DB/KV
+  if (!isValidUUID(uuid)) return false; // Basic validation first
+  if (!cfg.db || !cfg.kv) {
+    // Fallback: check against comma-separated UUIDs in env
+    const userIDs = (cfg.userID || '').split(',').map(id => id.trim());
+    return userIDs.includes(uuid);
+  }
 
   const cacheKey = `user:${uuid}`;
   let cachedStatus = await cfg.kv.get(cacheKey);
@@ -228,63 +233,50 @@ async function validateUser(uuid, cfg) {
  * @returns {Promise<Response>}
  */
 async function handleAdminRoutes(request, cfg) {
-  if (!cfg.adminKey) {
-    return new Response('Admin panel disabled', { status: 403 }); // Disable if no key set
-  }
-  const url = new URL(request.url);
-  const authHeader = request.headers.get('Authorization');
+    const url = new URL(request.url);
 
-  if (url.pathname === '/admin/login') {
-    // No auth required for login page
-    return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html' } });
-  }
-
-  if (url.pathname === '/admin/api/login') {
-    // Handle login POST
-    if (request.method === 'POST') {
-      const formData = await request.formData();
-      const key = formData.get('key');
-      if (key === cfg.adminKey) {
-        // In a real scenario, generate a token or session. Here, just return success.
-        return new Response('Login successful. Use Bearer token in API calls.', { status: 200 });
-      } else {
-        return new Response('Invalid key', { status: 401 });
-      }
+    // First, handle the public login page. No auth is needed to view it.
+    if (url.pathname === '/admin/login') {
+        return new Response(getAdminLoginHTML(), { headers: { 'Content-Type': 'text/html' } });
     }
-    return new Response('Method Not Allowed', { status: 405 });
-  }
 
-  // For other admin routes, require auth
-  if (authHeader !== `Bearer ${cfg.adminKey}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-
-  if (url.pathname === '/admin/api/users') {
-    if (request.method === 'GET') {
-      const { results } = await cfg.db.prepare('SELECT * FROM users').all();
-      return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
-    } else if (request.method === 'POST') {
-      const body = await request.json();
-      const uuid = crypto.randomUUID(); // Generate new UUID
-      await cfg.db.prepare('INSERT INTO users (id, expiration, status, notes) VALUES (?, ?, ?, ?)')
-        .bind(uuid, body.expiration, body.status || 'active', body.notes || '')
-        .run();
-      await cfg.kv.put(`user:${uuid}`, 'valid', { expirationTtl: 3600 });
-      return new Response(JSON.stringify({ uuid }), { status: 201 });
-    } else if (request.method === 'DELETE') {
-      const body = await request.json();
-      await cfg.db.prepare('DELETE FROM users WHERE id = ?').bind(body.uuid).run();
-      await cfg.kv.delete(`user:${body.uuid}`);
-      return new Response('User deleted', { status: 200 });
+    // For all other admin routes, perform security checks.
+    if (!cfg.adminKey) {
+        return new Response('Admin panel disabled. Set ADMIN_KEY in your environment variables.', { status: 403 });
     }
-  }
+    const authHeader = request.headers.get('Authorization');
+    if (authHeader !== `Bearer ${cfg.adminKey}`) {
+        return new Response('Unauthorized', { status: 401 });
+    }
 
-  if (url.pathname === '/admin/dashboard') {
-    // Dashboard page (embedded)
-    return new Response(getAdminDashboardHTML(), { headers: { 'Content-Type': 'text/html' } });
-  }
+    // If authentication is successful, handle the protected routes.
+    if (url.pathname === '/admin/dashboard') {
+        return new Response(getAdminDashboardHTML(), { headers: { 'Content-Type': 'text/html' } });
+    }
 
-  return new Response('Not Found', { status: 404 });
+    if (url.pathname === '/admin/api/users') {
+        if (!cfg.db) return new Response('Database is not configured.', { status: 500 });
+
+        if (request.method === 'GET') {
+            const { results } = await cfg.db.prepare('SELECT * FROM users').all();
+            return new Response(JSON.stringify(results), { headers: { 'Content-Type': 'application/json' } });
+        } else if (request.method === 'POST') {
+            const body = await request.json();
+            const uuid = crypto.randomUUID(); // Generate new UUID
+            await cfg.db.prepare('INSERT INTO users (id, expiration, status, notes) VALUES (?, ?, ?, ?)')
+                .bind(uuid, body.expiration, body.status || 'active', body.notes || '')
+                .run();
+            await cfg.kv.put(`user:${uuid}`, 'valid', { expirationTtl: 3600 });
+            return new Response(JSON.stringify({ id: uuid }), { status: 201 }); // Return the new user object
+        } else if (request.method === 'DELETE') {
+            const body = await request.json();
+            await cfg.db.prepare('DELETE FROM users WHERE id = ?').bind(body.uuid).run();
+            await cfg.kv.delete(`user:${body.uuid}`);
+            return new Response('User deleted', { status: 200 });
+        }
+    }
+
+    return new Response('Admin route not found', { status: 404 });
 }
 
 /**
@@ -295,26 +287,39 @@ function getAdminLoginHTML() {
   return `
     <!DOCTYPE html>
     <html lang="en">
-    <head><title>Admin Login</title></head>
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Admin Login</title>
+      <style>
+        body { font-family: sans-serif; background: #222; color: #eee; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .login-box { background: #333; padding: 40px; border-radius: 8px; box-shadow: 0 0 15px rgba(0,0,0,0.5); text-align: center; }
+        h1 { margin-bottom: 20px; }
+        input { width: 100%; padding: 10px; margin-bottom: 20px; border-radius: 4px; border: 1px solid #555; background: #444; color: #eee; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; border: none; border-radius: 4px; background: #007bff; color: white; font-size: 16px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        p { font-size: 12px; color: #999; margin-top: 20px; }
+      </style>
+    </head>
     <body>
-      <h1>Admin Login</h1>
-      <form method="POST" action="/admin/api/login">
-        <input type="password" name="key" placeholder="Admin Key">
-        <button type="submit">Login</button>
-      </form>
+      <div class="login-box">
+        <h1>Admin Login</h1>
+        <input type="password" id="admin-key-input" placeholder="Enter Admin Key">
+        <button onclick="login()">Go to Dashboard</button>
+        <p>Enter the ADMIN_KEY set in your environment variables.</p>
+      </div>
       <script>
-        // After login, store key in localStorage for dashboard
-        document.querySelector('form').addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const formData = new FormData(e.target);
-          const response = await fetch('/admin/api/login', { method: 'POST', body: formData });
-          if (response.ok) {
-            localStorage.setItem('adminKey', formData.get('key'));
-            window.location.href = '/admin/dashboard';
-          } else {
-            alert('Invalid key');
+        function login() {
+          const key = document.getElementById('admin-key-input').value;
+          if (!key) {
+            alert('Please enter the admin key.');
+            return;
           }
-        });
+          // Store the key in localStorage to be used by the dashboard
+          localStorage.setItem('adminKey', key);
+          // Redirect to the dashboard
+          window.location.href = '/admin/dashboard';
+        }
       </script>
     </body>
     </html>
@@ -332,31 +337,48 @@ function getAdminDashboardHTML() {
     <head><title>Admin Dashboard</title></head>
     <body>
       <h1>Admin Dashboard</h1>
-      <div id="users"></div>
-      <button onclick="fetchUsers()">Load Users</button>
+      <p>This is a placeholder for the admin dashboard. API functionality is available at /admin/api/users.</p>
+      <div id="users">Loading...</div>
       <script>
-        async function fetchUsers() {
-          const key = localStorage.getItem('adminKey');
-          if (!key) {
-            alert('Please login first');
+        document.addEventListener('DOMContentLoaded', function() {
+          const adminKey = localStorage.getItem('adminKey');
+          if (!adminKey) {
+            alert('Admin key not found. Please log in first.');
             window.location.href = '/admin/login';
             return;
           }
-          const res = await fetch('/admin/api/users', { headers: { 'Authorization': \`Bearer \${key}\` } });
-          if (!res.ok) {
-            alert('Unauthorized. Please login again.');
-            localStorage.removeItem('adminKey');
-            window.location.href = '/admin/login';
-            return;
-          }
-          const users = await res.json();
-          document.getElementById('users').innerHTML = users.map(u => '<p>' + u.id + '</p>').join('');
-        }
+
+          fetch('/admin/api/users', {
+            headers: { 'Authorization': 'Bearer ' + adminKey }
+          })
+          .then(res => {
+            if (res.status === 401) {
+               alert('Unauthorized. The key may be incorrect.');
+               localStorage.removeItem('adminKey');
+               window.location.href = '/admin/login';
+               return;
+            }
+            if (!res.ok) throw new Error('Failed to load users');
+            return res.json();
+          })
+          .then(users => {
+            const usersDiv = document.getElementById('users');
+            if (users && users.length > 0) {
+              usersDiv.innerHTML = '<h2>Users:</h2>' + users.map(u => '<p>' + u.id + ' (' + u.status + ')</p>').join('');
+            } else {
+              usersDiv.innerHTML = '<p>No users found or database not configured.</p>';
+            }
+          })
+          .catch(err => {
+            document.getElementById('users').innerHTML = '<p style="color: red;">Error: ' + err.message + '</p>';
+          });
+        });
       </script>
     </body>
     </html>
   `;
 }
+
 
 export default {
   /**
@@ -368,59 +390,63 @@ export default {
     const cfg = Config.fromEnv(env);
     const url = new URL(request.url);
     
+    // Admin routes are handled first
+    if (url.pathname.startsWith('/admin/')) {
+      return handleAdminRoutes(request, cfg);
+    }
+    
     const upgradeHeader = request.headers.get('Upgrade');
     if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
-      const uuid = url.pathname.split('/')[1]; // Extract UUID from path for validation
-      if (!await validateUser(uuid, cfg)) {
-        return new Response('Invalid UUID', { status: 403 });
+      // For websocket, UUID is the first part of the path
+      const uuid = url.pathname.split('/')[1];
+      const userIDs = (cfg.userID || '').split(',').map(id => id.trim());
+      if (userIDs.includes(uuid)) { // Basic check for websocket
+          const requestConfig = {
+              userID: uuid, // Use the matched UUID
+              proxyIP: cfg.proxyIP,
+              proxyPort: cfg.proxyPort,
+              socks5Address: cfg.socks5.address,
+              socks5Relay: cfg.socks5.relayMode,
+              enableSocks: cfg.socks5.enabled,
+              parsedSocks5Address: cfg.socks5.enabled
+                ? socks5AddressParser(cfg.socks5.address)
+                : {},
+              dohUpstreamUrl: cfg.dohUpstreamUrl,
+          };
+          return ProtocolOverWSHandler(request, requestConfig);
       }
-      const requestConfig = {
-        userID: cfg.userID,
-        proxyIP: cfg.proxyIP,
-        proxyPort: cfg.proxyPort,
-        socks5Address: cfg.socks5.address,
-        socks5Relay: cfg.socks5.relayMode,
-        enableSocks: cfg.socks5.enabled,
-        parsedSocks5Address: cfg.socks5.enabled
-          ? socks5AddressParser(cfg.socks5.address)
-          : {},
-        dohUpstreamUrl: cfg.dohUpstreamUrl, // Advanced: Pass DoH upstream
-      };
-
-      return ProtocolOverWSHandler(request, requestConfig);
+      return new Response('Invalid user', { status: 403 });
     }
     
     if (url.pathname === '/dns-query') {
-      return handleDoHQuery(request, cfg); // Advanced: DoH endpoint
+      return handleDoHQuery(request, cfg);
     }
 
     if (url.pathname === '/scamalytics-lookup')
       return handleScamalyticsLookup(request, cfg);
 
-    if (url.pathname.startsWith('/admin/')) {
-      return handleAdminRoutes(request, cfg); // Advanced: Admin routes
-    }
-
     if (url.pathname.startsWith(`/xray/`)) {
       const uuid = url.pathname.split('/xray/')[1];
-      if (!await validateUser(uuid, cfg)) return new Response('Invalid UUID', { status: 403 });
+      if (!await validateUser(uuid, cfg)) return new Response('Invalid or expired UUID', { status: 403 });
       return handleIpSubscription('xray', uuid, url.hostname);
     }
 
     if (url.pathname.startsWith(`/sb/`)) {
       const uuid = url.pathname.split('/sb/')[1];
-      if (!await validateUser(uuid, cfg)) return new Response('Invalid UUID', { status: 403 });
+      if (!await validateUser(uuid, cfg)) return new Response('Invalid or expired UUID', { status: 403 });
       return handleIpSubscription('sb', uuid, url.hostname);
     }
 
+    // This handles the root path config page
     if (url.pathname.startsWith(`/`)) {
       const uuid = url.pathname.slice(1);
-      if (uuid && await validateUser(uuid, cfg)) {
+      if (uuid && (await validateUser(uuid, cfg))) {
         return handleConfigPage(uuid, url.hostname, cfg.proxyAddress);
       }
     }
 
-    return new Response('UUID not found. Please set the UUID environment variable in the Cloudflare dashboard.', { status: 404 });
+    // Default response if no routes match
+    return new Response('Not Found. Ensure the UUID is correct or the path is valid.', { status: 404 });
   },
 };
 
@@ -1583,7 +1609,7 @@ function getPageScript() {
 
           if (proxyDomainOrIp && proxyDomainOrIp !== "N/A") {
             let resolvedProxyIp = proxyDomainOrIp;
-            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) {
+            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp) && !/^[\\s\\S]*:/.test(proxyDomainOrIp)) { // Added IPv6 check
               try {
                 const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
                 if (dnsRes.ok) {
