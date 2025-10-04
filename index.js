@@ -16,12 +16,13 @@
 // - English comments for clarity.
 // - Fixed Hiddify connection: Limited to port 443 for TLS on clean IPs/domains.
 // - Intelligent retry with logging.
+// - Fixed handshake failure by using valid backend proxy IPs.
 
 import { connect } from 'cloudflare:sockets';
 
 // --- CONFIGURATION ---
 const Config = {
-  proxyIPs: ['44.209.52.7:443', '1.1.1.1:443'], // Default fallback IPs.
+  proxyIPs: ['nima.nscl.ir:443'], // Valid backend from first script.
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
@@ -1190,10 +1191,10 @@ async function HandleTCPOutBound(
 ) {
   let proxyIndex = 0;
   async function connectAndWrite(address, port, socks = false) {
-    let tcpSocket;
     const currentProxy = config.proxyAddresses[proxyIndex % config.proxyAddresses.length];
     const [proxyHost, proxyPort] = currentProxy.split(':');
     try {
+      let tcpSocket;
       if (config.socks5.relayMode) {
         tcpSocket = await socks5Connect(addressType, address, port, log, config.socks5);
       } else {
