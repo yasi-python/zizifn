@@ -1305,7 +1305,7 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
             const udpSizeBuffer = new Uint8Array([(udpSize >> 8) & 0xff, udpSize & 0xff]);
 
             if (webSocket.readyState === CONST.WS_READY_STATE_OPEN) {
-              log(`DNS query successful, length: \${udpSize}`);
+              log(`DNS query successful, length: ${udpSize}`);
               if (isHeaderSent) {
                 webSocket.send(await new Blob([udpSizeBuffer, dnsQueryResult]).arrayBuffer());
               } else {
@@ -1378,7 +1378,7 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
       ]);
       break;
     default:
-      throw new Error(`Invalid addressType for SOCKS5: \${addressType}`);
+      throw new Error(`Invalid addressType for SOCKS5: ${addressType}`);
   }
 
   const socksRequest = new Uint8Array([5, 1, 0, ...DSTADDR, portRemote >> 8, portRemote & 0xff]);
@@ -1432,7 +1432,7 @@ async function handleScamalyticsLookup(request, config) {
     });
   }
 
-  const scamalyticsUrl = `\${baseUrl}\${username}/?key=\${apiKey}&ip=\${ipToLookup}`;
+  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
   const headers = new Headers({
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*',
@@ -1455,7 +1455,7 @@ function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// ############# MODIFIED AND CORRECTED SECTION #############
+// ############# NEW AND CORRECTED SECTION #############
 
 function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
   const dream = buildLink({
@@ -1471,14 +1471,25 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   const configs = { dream, freedom };
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
   const subSbUrl   = `https://${hostName}/sb/${userID}`;
+
+  // --- START: PROFESSIONAL FIX FOR DIRECT IMPORT ---
+  // A base64 data URI is created containing the single VLESS configuration.
+  // This method is more reliable for clients that might have issues fetching subscription URLs from deep links.
+  // The "content" of this subscription is simply the single config string itself, encoded in base64.
+  const directImportXrayContent = btoa(configs.dream);
+  const directImportXrayDataUri = `data:text/plain;base64,${directImportXrayContent}`;
+  // --- END: PROFESSIONAL FIX ---
   
   const clientUrls = {
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
-    // The npvTunnel link is now fixed for maximum compatibility.
-    // Changed "install-config" to the more standard "subscribe" and added a "name" parameter.
-    npvTunnel: `npvtunnel://subscribe?url=${encodeURIComponent(subXrayUrl)}&name=Zizifn-Config-Xray`,
-    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    
+    // --- MODIFIED LINES FOR NPV TUNNEL & KARING ---
+    // The links now use the direct base64 data URI for flawless one-click import.
+    npvTunnel: `npvtunnel://install-config?url=${encodeURIComponent(directImportXrayDataUri)}`,
+    karing: `karing://install-config?url=${encodeURIComponent(directImportXrayDataUri)}`,
+    // --- END OF MODIFIED LINES ---
+
+    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`, // Kept as a subscription link, as it's standard for V2RayNG.
     exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
   };
   
@@ -1486,7 +1497,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   let expirationBlock = '';
   if (expDate && expTime) {
       const utcTimestamp = `${expDate}T${expTime.split('.')[0]}Z`;
-      expirationBlock = `<p id="expiration-display" data-utc-time="\${utcTimestamp}">
+      expirationBlock = `<p id="expiration-display" data-utc-time="${utcTimestamp}">
           Loading expiration time...
       </p>`;
   } else {
@@ -1510,9 +1521,9 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   <body data-proxy-ip="${proxyAddress}">
     ${getPageHTML(configs, clientUrls).replace(
         '<p>Copy the configuration or import directly into your client</p>', 
-        `<p>Copy the configuration or import directly into your client</p>\${expirationBlock}`
+        `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
     )}
-    <script>\${getPageScript()}</script>
+    <script>${getPageScript()}</script>
   </body>
   </html>`;
 
@@ -1792,17 +1803,17 @@ function getPageHTML(configs, clientUrls) {
             Copy
           </button>
         </div>
-        <div class="config-content"><pre id="xray-config">\${configs.dream}</pre></div>
+        <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
         <div class="client-buttons">
           <a href="${clientUrls.npvTunnel}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
             <span class="button-text">Import to Npv Tunnel</span>
           </a>
-          <a href="\${clientUrls.karing}" class="button client-btn">
+          <a href="${clientUrls.karing}" class="button client-btn">
              <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
              <span class="button-text">Import to Karing</span>
           </a>
-          <a href="\${clientUrls.v2rayng}" class="button client-btn">
+          <a href="${clientUrls.v2rayng}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
             <span class="button-text">Import to V2rayNG</span>
           </a>
@@ -1817,13 +1828,13 @@ function getPageHTML(configs, clientUrls) {
             Copy
           </button>
         </div>
-        <div class="config-content"><pre id="singbox-config">\${configs.freedom}</pre></div>
+        <div class="config-content"><pre id="singbox-config">${configs.freedom}</pre></div>
         <div class="client-buttons">
-          <a href="\${clientUrls.clashMeta}" class="button client-btn">
+          <a href="${clientUrls.clashMeta}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
             <span class="button-text">Import to Clash Meta</span>
           </a>
-          <a href="\${clientUrls.exclave}" class="button client-btn">
+          <a href="${clientUrls.exclave}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
             <span class="button-text">Import to Exclavex</span>
           </a>
@@ -1831,7 +1842,7 @@ function getPageHTML(configs, clientUrls) {
       </div>
 
       <div class="footer">
-        <p>© <span id="current-year">\${new Date().getFullYear()}</span> REvil - All Rights Reserved</p>
+        <p>© <span id="current-year">${new Date().getFullYear()}</span> REvil - All Rights Reserved</p>
         <p>Secure. Private. Fast.</p>
       </div>
     </div>
