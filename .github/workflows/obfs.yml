@@ -11,7 +11,9 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
-
+  schedule:
+    - cron: '*/60 * * * *' # Runs every 60 minutes
+    
 permissions:
   contents: write
 
