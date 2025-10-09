@@ -1,44 +1,721 @@
 import { connect } from 'cloudflare:sockets';
 
-/**
- * - UUID: To generate your own UUID, visit: https://www.uuidgenerator.net
- *   You can add multiple UUIDs by separating them with a comma (e.g., 'uuid1, uuid2').
- * 
- * - Proxy IP Land: A large, daily-updated repository of tested proxy IPs.
- *   Find the list here: https://github.com/NiREvil/vless/blob/main/sub/ProxyIP.md
- * 
- * - Scamalytics API: The default key is for public use. If you are creating a popular fork,
- *   it's recommended to get your own free API key from:
- *   https://scamalytics.com/ip/api/enquiry?monthly_api_calls=5000
- */
-const Config = {
-  // Can be a single UUID or multiple UUIDs separated by commas.
-  userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
+// Helper functions (updated for robustness)
+function generateUUID() {
+  return crypto.randomUUID();
+}
 
-  // An array of proxy addresses. You can add multiple proxies to the list.
-  // Example: ['proxy1.ir:8443', '1.1.1.1:443', 'proxy2.com:2053']
+/**
+ * Checks if the expiration date and time are in the future.
+ * Treats the stored time as UTC to prevent timezone ambiguity.
+ * @param {string} expDate - The expiration date in 'YYYY-MM-DD' format.
+ * @param {string} expTime - The expiration time in 'HH:MM:SS' format.
+ * @returns {boolean} - True if the expiration is in the future, otherwise false.
+ */
+async function checkExpiration(expDate, expTime) {
+  if (!expDate || !expTime) return false;
+  const expDatetimeUTC = new Date(`${expDate}T${expTime}Z`);
+  return expDatetimeUTC > new Date() && !isNaN(expDatetimeUTC);
+}
+
+/**
+ * Retrieves user data from KV cache or falls back to D1 database.
+ * @param {object} env - The worker environment object.
+ * @param {string} uuid - The user's UUID.
+ * @returns {Promise<object|null>} - The user data or null if not found.
+ */
+async function getUserData(env, uuid) {
+  let userData = await env.USER_KV.get(`user:${uuid}`);
+  if (userData) {
+    try {
+      return JSON.parse(userData);
+    } catch (e) {}
+  }
+
+  const query = await env.DB.prepare("SELECT expiration_date, expiration_time FROM users WHERE uuid = ?")
+    .bind(uuid)
+    .first();
+
+  if (!query) {
+    return null;
+  }
+
+  userData = { exp_date: query.expiration_date, exp_time: query.expiration_time };
+  await env.USER_KV.put(`user:${uuid}`, JSON.stringify(userData), { expirationTtl: 3600 });
+  return userData;
+}
+
+// --- Admin Security & Panel ---
+
+// HTML for the Admin Login Page
+const adminLoginHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login</title>
+    <style>
+        body { display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background-color: #121212; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .login-container { background-color: #1e1e1e; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); text-align: center; width: 320px; border: 1px solid #333; }
+        h1 { color: #ffffff; margin-bottom: 24px; font-weight: 500; }
+        form { display: flex; flex-direction: column; }
+        input[type="password"] { background-color: #2c2c2c; border: 1px solid #444; color: #ffffff; padding: 12px; border-radius: 8px; margin-bottom: 20px; font-size: 16px; }
+        input[type="password"]:focus { outline: none; border-color: #007aff; box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.3); }
+        button { background-color: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer; transition: background-color 0.2s; }
+        button:hover { background-color: #005ecb; }
+        .error { color: #ff3b30; margin-top: 15px; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Admin Login</h1>
+        <form method="POST" action="/admin">
+            <input type="password" name="password" placeholder="••••••••••••••" required>
+            <button type="submit">Login</button>
+        </form>
+        </div>
+</body>
+</html>
+`;
+
+// --- FINAL, COMPLETE, AND TIMEZONE-SMART ADMIN PANEL HTML ---
+const adminPanelHTML = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        :root {
+            --bg-main: #111827; --bg-card: #1F2937; --border: #374151; --text-primary: #F9FAFB;
+            --text-secondary: #9CA3AF; --accent: #3B82F6; --accent-hover: #2563EB; --danger: #EF4444;
+            --danger-hover: #DC2626; --success: #22C55E; --expired: #F59E0B; --btn-secondary-bg: #4B5563;
+        }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background-color: var(--bg-main); color: var(--text-primary); font-size: 14px; }
+        .container { max-width: 1200px; margin: 40px auto; padding: 0 20px; }
+        h1, h2 { font-weight: 600; }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        h2 { font-size: 18px; border-bottom: 1px solid var(--border); padding-bottom: 10px; margin-bottom: 20px; }
+        .card { background-color: var(--bg-card); border-radius: 8px; padding: 24px; border: 1px solid var(--border); box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: flex-end; }
+        .form-group { display: flex; flex-direction: column; }
+        .form-group label { margin-bottom: 8px; font-weight: 500; color: var(--text-secondary); }
+        .form-group .input-group { display: flex; }
+        input[type="text"], input[type="date"], input[type="time"] {
+            width: 100%; box-sizing: border-box; background-color: #374151; border: 1px solid #4B5563; color: var(--text-primary);
+            padding: 10px; border-radius: 6px; font-size: 14px; transition: border-color 0.2s;
+        }
+        input:focus { outline: none; border-color: var(--accent); }
+        .label-note { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+        .btn {
+            padding: 10px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer;
+            transition: background-color 0.2s, transform 0.1s; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn-primary { background-color: var(--accent); color: white; }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-secondary { background-color: var(--btn-secondary-bg); color: white; }
+        .btn-secondary:hover { background-color: #6B7280; }
+        .btn-danger { background-color: var(--danger); color: white; }
+        .btn-danger:hover { background-color: var(--danger-hover); }
+        .input-group .btn-secondary { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+        .input-group input { border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        th { color: var(--text-secondary); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+        td { color: var(--text-primary); font-family: "SF Mono", "Fira Code", monospace; }
+        .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; display: inline-block; }
+        .status-active { background-color: var(--success); color: #064E3B; }
+        .status-expired { background-color: var(--expired); color: #78350F; }
+        .actions-cell .btn { padding: 6px 10px; font-size: 12px; }
+        #toast { position: fixed; top: 20px; right: 20px; background-color: var(--bg-card); color: white; padding: 15px 20px; border-radius: 8px; z-index: 1001; display: none; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(-20px); }
+        #toast.show { display: block; opacity: 1; transform: translateY(0); }
+        #toast.error { border-left: 5px solid var(--danger); }
+        #toast.success { border-left: 5px solid var(--success); }
+        .uuid-cell { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+        .btn-copy { background: transparent; border: none; color: var(--text-secondary); padding: 4px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .btn-copy:hover { background-color: #374151; color: var(--text-primary); }
+        .btn svg, .actions-cell .btn svg { width: 14px; height: 14px; }
+        .actions-cell { display: flex; gap: 8px; justify-content: center; }
+        .time-display { display: flex; flex-direction: column; }
+        .time-local { font-weight: 600; }
+        .time-utc, .time-relative { font-size: 11px; color: var(--text-secondary); }
+
+        /* --- MODAL STYLES --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s; }
+        .modal-overlay.show { opacity: 1; visibility: visible; }
+        .modal-content { background-color: var(--bg-card); padding: 30px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.4); width: 90%; max-width: 500px; transform: scale(0.9); transition: transform 0.3s; border: 1px solid var(--border); }
+        .modal-overlay.show .modal-content { transform: scale(1); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px; }
+        .modal-header h2 { margin: 0; border: none; font-size: 20px; }
+        .modal-close-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; line-height: 1; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 25px; }
+
+        /* --- NEW: INTELLIGENT TIME SETTER STYLES --- */
+        .time-quick-set-group { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+        .btn-outline-secondary {
+            background-color: transparent; border: 1px solid var(--btn-secondary-bg); color: var(--text-secondary);
+            padding: 6px 10px; font-size: 12px; font-weight: 500;
+        }
+        .btn-outline-secondary:hover { background-color: var(--btn-secondary-bg); color: white; border-color: var(--btn-secondary-bg); }
+
+        @media (max-width: 768px) {
+            tr { border: 1px solid var(--border); border-radius: 8px; display: block; margin-bottom: 1rem; }
+            td { border: none; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Admin Dashboard</h1>
+        <div class="card">
+            <h2>Create User</h2>
+            <form id="createUserForm" class="form-grid">
+                <div class="form-group" style="grid-column: 1 / -1;"><label for="uuid">UUID</label><div class="input-group"><input type="text" id="uuid" required><button type="button" id="generateUUID" class="btn btn-secondary">Generate</button></div></div>
+                <div class="form-group"><label for="expiryDate">Expiry Date</label><input type="date" id="expiryDate" required></div>
+                <div class="form-group">
+                    <label for="expiryTime">Expiry Time (Your Local Time)</label>
+                    <input type="time" id="expiryTime" step="1" required>
+                    <div class="label-note">Automatically converted to UTC on save.</div>
+                    <div class="time-quick-set-group" data-target-date="expiryDate" data-target-time="expiryTime">
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="hour">+1 Hour</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="day">+1 Day</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="7" data-unit="day">+1 Week</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="month">+1 Month</button>
+                    </div>
+                </div>
+                <div class="form-group"><label for="notes">Notes</label><input type="text" id="notes" placeholder="(Optional)"></div>
+                <div class="form-group"><label>&nbsp;</label><button type="submit" class="btn btn-primary">Create User</button></div>
+            </form>
+        </div>
+        <div class="card" style="margin-top: 30px;">
+            <h2>User List</h2>
+            <div style="overflow-x: auto;">
+                 <table>
+                    <thead><tr><th>UUID</th><th>Created</th><th>Expiry (Admin Local)</th><th>Expiry (Tehran)</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+                    <tbody id="userList"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div id="toast"></div>
+    <div id="editModal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit User</h2>
+                <button id="modalCloseBtn" class="modal-close-btn">&times;</button>
+            </div>
+            <form id="editUserForm">
+                <input type="hidden" id="editUuid" name="uuid">
+                <div class="form-group"><label for="editExpiryDate">Expiry Date</label><input type="date" id="editExpiryDate" name="exp_date" required></div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label for="editExpiryTime">Expiry Time (Your Local Time)</label>
+                    <input type="time" id="editExpiryTime" name="exp_time" step="1" required>
+                     <div class="label-note">Your current timezone is used for conversion.</div>
+                    <div class="time-quick-set-group" data-target-date="editExpiryDate" data-target-time="editExpiryTime">
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="hour">+1 Hour</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="day">+1 Day</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="7" data-unit="day">+1 Week</button>
+                        <button type="button" class="btn btn-outline-secondary" data-amount="1" data-unit="month">+1 Month</button>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top: 16px;"><label for="editNotes">Notes</label><input type="text" id="editNotes" name="notes" placeholder="(Optional)"></div>
+                <div class="modal-footer">
+                    <button type="button" id="modalCancelBtn" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const API_BASE = '/admin/api';
+            let allUsers = [];
+            const userList = document.getElementById('userList');
+            const createUserForm = document.getElementById('createUserForm');
+            const generateUUIDBtn = document.getElementById('generateUUID');
+            const uuidInput = document.getElementById('uuid');
+            const toast = document.getElementById('toast');
+            const editModal = document.getElementById('editModal');
+            const editUserForm = document.getElementById('editUserForm');
+
+            function showToast(message, isError = false) {
+                toast.textContent = message;
+                toast.className = isError ? 'error' : 'success';
+                toast.classList.add('show');
+                setTimeout(() => { toast.classList.remove('show'); }, 3000);
+            }
+
+            const api = {
+                get: (endpoint) => fetch(\`\${API_BASE}\${endpoint}\`, { credentials: 'include' }).then(handleResponse),
+                post: (endpoint, body) => fetch(\`\${API_BASE}\${endpoint}\`, { method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }).then(handleResponse),
+                put: (endpoint, body) => fetch(\`\${API_BASE}\${endpoint}\`, { method: 'PUT', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) }).then(handleResponse),
+                delete: (endpoint) => fetch(\`\${API_BASE}\${endpoint}\`, { method: 'DELETE', credentials: 'include' }).then(handleResponse),
+            };
+
+            async function handleResponse(response) {
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ error: 'An unknown error occurred.' }));
+                    throw new Error(errorData.error || \`Request failed with status \${response.status}\`);
+                }
+                return response.status === 204 ? null : response.json();
+            }
+
+            // --- HELPER: Pad number with leading zero ---
+            const pad = (num) => num.toString().padStart(2, '0');
+
+            /**
+             * --- TIMEZONE-AWARE: Converts a local date and time from form inputs to a UTC date and time object. ---
+             * @param {string} dateStr - Date string from <input type="date"> (YYYY-MM-DD).
+             * @param {string} timeStr - Time string from <input type="time"> (HH:MM or HH:MM:SS).
+             * @returns {{utcDate: string, utcTime: string}} - Object with UTC date and time strings.
+             */
+            function localToUTC(dateStr, timeStr) {
+                if (!dateStr || !timeStr) return { utcDate: '', utcTime: '' };
+                 // Combine local date and time into a single string that JS Date constructor understands
+                const localDateTime = new Date(\`\${dateStr}T\${timeStr}\`);
+                if (isNaN(localDateTime)) return { utcDate: '', utcTime: '' };
+
+                const year = localDateTime.getUTCFullYear();
+                const month = pad(localDateTime.getUTCMonth() + 1);
+                const day = pad(localDateTime.getUTCDate());
+                const hours = pad(localDateTime.getUTCHours());
+                const minutes = pad(localDateTime.getUTCMinutes());
+                const seconds = pad(localDateTime.getUTCSeconds());
+                
+                return {
+                    utcDate: \`\${year}-\${month}-\${day}\`,
+                    utcTime: \`\${hours}:\${minutes}:\${seconds}\`
+                };
+            }
+
+            /**
+             * --- TIMEZONE-AWARE: Converts a UTC date and time to local date and time for form inputs. ---
+             * @param {string} utcDateStr - UTC date string (YYYY-MM-DD).
+             * @param {string} utcTimeStr - UTC time string (HH:MM:SS).
+             * @returns {{localDate: string, localTime: string}} - Object with local date and time strings.
+             */
+            function utcToLocal(utcDateStr, utcTimeStr) {
+                if (!utcDateStr || !utcTimeStr) return { localDate: '', localTime: '' };
+                const utcDateTime = new Date(\`\${utcDateStr}T\${utcTimeStr}Z\`);
+                if (isNaN(utcDateTime)) return { localDate: '', localTime: '' };
+                
+                const year = utcDateTime.getFullYear();
+                const month = pad(utcDateTime.getMonth() + 1);
+                const day = pad(utcDateTime.getDate());
+                const hours = pad(utcDateTime.getHours());
+                const minutes = pad(utcDateTime.getMinutes());
+                const seconds = pad(utcDateTime.getSeconds());
+
+                return {
+                    localDate: \`\${year}-\${month}-\${day}\`,
+                    localTime: \`\${hours}:\${minutes}:\${seconds}\`
+                };
+            }
+            
+            /**
+             * --- HELPER: Adds time to local date/time inputs. ---
+             */
+            function addExpiryTime(dateInputId, timeInputId, amount, unit) {
+                const dateInput = document.getElementById(dateInputId);
+                const timeInput = document.getElementById(timeInputId);
+                
+                let date = new Date(\`\${dateInput.value}T\${timeInput.value || '00:00:00'}\`);
+                if (isNaN(date.getTime())) {
+                    date = new Date();
+                }
+
+                if (unit === 'hour') date.setHours(date.getHours() + amount);
+                else if (unit === 'day') date.setDate(date.getDate() + amount);
+                else if (unit === 'month') date.setMonth(date.getMonth() + amount);
+                
+                const year = date.getFullYear();
+                const month = pad(date.getMonth() + 1);
+                const day = pad(date.getDate());
+                const hours = pad(date.getHours());
+                const minutes = pad(date.getMinutes());
+                const seconds = pad(date.getSeconds());
+
+                dateInput.value = \`\${year}-\${month}-\${day}\`;
+                timeInput.value = \`\${hours}:\${minutes}:\${seconds}\`;
+            }
+
+            document.body.addEventListener('click', (e) => {
+                const target = e.target.closest('.time-quick-set-group button');
+                if (!target) return;
+                const group = target.closest('.time-quick-set-group');
+                addExpiryTime(
+                    group.dataset.targetDate,
+                    group.dataset.targetTime,
+                    parseInt(target.dataset.amount, 10),
+                    target.dataset.unit
+                );
+            });
+
+            // START: *** PROFESSIONAL TIME FORMATTING ENHANCEMENT ***
+            function formatExpiryDateTime(expDateStr, expTimeStr) {
+                const expiryUTC = new Date(\`\${expDateStr}T\${expTimeStr}Z\`);
+                if (isNaN(expiryUTC)) return { local: 'Invalid Date', utc: '', relative: '', tehran: '', isExpired: true };
+                
+                const now = new Date();
+                const isExpired = expiryUTC < now;
+
+                const commonOptions = {
+                    year: 'numeric', month: '2-digit', day: '2-digit',
+                    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short'
+                };
+
+                // 1. Admin's Local Time
+                const localTime = expiryUTC.toLocaleString(undefined, commonOptions);
+
+                // 2. Tehran Time (GMT+03:30)
+                const tehranTime = expiryUTC.toLocaleString('en-US', { ...commonOptions, timeZone: 'Asia/Tehran' });
+
+                // 3. UTC Time
+                const utcTime = expiryUTC.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+
+                // 4. Relative Time
+                const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+                const diffSeconds = (expiryUTC.getTime() - now.getTime()) / 1000;
+                let relativeTime = '';
+                if (Math.abs(diffSeconds) < 60) relativeTime = rtf.format(Math.round(diffSeconds), 'second');
+                else if (Math.abs(diffSeconds) < 3600) relativeTime = rtf.format(Math.round(diffSeconds / 60), 'minute');
+                else if (Math.abs(diffSeconds) < 86400) relativeTime = rtf.format(Math.round(diffSeconds / 3600), 'hour');
+                else relativeTime = rtf.format(Math.round(diffSeconds / 86400), 'day');
+
+                return { local: localTime, tehran: tehranTime, utc: utcTime, relative: relativeTime, isExpired };
+            }
+            // END: *** PROFESSIONAL TIME FORMATTING ENHANCEMENT ***
+
+            function renderUsers() {
+                userList.innerHTML = '';
+                if (allUsers.length === 0) {
+                    userList.innerHTML = '<tr><td colspan="7" style="text-align:center;">No users found.</td></tr>';
+                } else {
+                    allUsers.forEach(user => {
+                        const expiry = formatExpiryDateTime(user.expiration_date, user.expiration_time);
+                        const row = document.createElement('tr');
+                        row.innerHTML = \`
+                            <td><div class="uuid-cell" title="\${user.uuid}">\${user.uuid}</div></td>
+                            <td>\${new Date(user.created_at).toLocaleString()}</td>
+                            <td>
+                                <div class="time-display">
+                                    <span class="time-local" title="Your Local Time">\${expiry.local}</span>
+                                    <span class="time-utc" title="Coordinated Universal Time">\${expiry.utc}</span>
+                                    <span class="time-relative">\${expiry.relative}</span>
+                                </div>
+                            </td>
+                             <td>
+                                <div class="time-display">
+                                    <span class="time-local" title="Tehran Time (GMT+03:30)">\${expiry.tehran}</span>
+                                    <span class="time-utc">Asia/Tehran</span>
+                                </div>
+                            </td>
+                            <td><span class="status-badge \${expiry.isExpired ? 'status-expired' : 'status-active'}">\${expiry.isExpired ? 'Expired' : 'Active'}</span></td>
+                            <td>\${user.notes || '-'}</td>
+                            <td>
+                                <div class="actions-cell">
+                                    <button class="btn btn-secondary btn-edit" data-uuid="\${user.uuid}">Edit</button>
+                                    <button class="btn btn-danger btn-delete" data-uuid="\${user.uuid}">Delete</button>
+                                </div>
+                            </td>
+                        \`;
+                        userList.appendChild(row);
+                    });
+                }
+            }
+            
+            async function fetchAndRenderUsers() {
+                try {
+                    allUsers = await api.get('/users');
+                    allUsers.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    renderUsers();
+                } catch (error) { showToast(error.message, true); }
+            }
+
+            async function handleCreateUser(e) {
+                e.preventDefault();
+                const localDate = document.getElementById('expiryDate').value;
+                const localTime = document.getElementById('expiryTime').value;
+                
+                const { utcDate, utcTime } = localToUTC(localDate, localTime);
+                if (!utcDate || !utcTime) return showToast('Invalid date or time entered.', true);
+
+                const userData = {
+                    uuid: uuidInput.value,
+                    exp_date: utcDate,
+                    exp_time: utcTime,
+                    notes: document.getElementById('notes').value
+                };
+
+                try {
+                    await api.post('/users', userData);
+                    showToast('User created successfully!');
+                    createUserForm.reset();
+                    uuidInput.value = crypto.randomUUID();
+                    setDefaultExpiry();
+                    await fetchAndRenderUsers();
+                } catch (error) { showToast(error.message, true); }
+            }
+
+            async function handleDeleteUser(uuid) {
+                if (confirm(\`Delete user \${uuid}?\`)) {
+                    try {
+                        await api.delete(\`/users/\${uuid}\`);
+                        showToast('User deleted successfully!');
+                        await fetchAndRenderUsers();
+                    } catch (error) { showToast(error.message, true); }
+                }
+            }
+
+            function openEditModal(uuid) {
+                const user = allUsers.find(u => u.uuid === uuid);
+                if (!user) return showToast('User not found.', true);
+
+                const { localDate, localTime } = utcToLocal(user.expiration_date, user.expiration_time);
+
+                document.getElementById('editUuid').value = user.uuid;
+                document.getElementById('editExpiryDate').value = localDate;
+                document.getElementById('editExpiryTime').value = localTime;
+                document.getElementById('editNotes').value = user.notes || '';
+                editModal.classList.add('show');
+            }
+
+            function closeEditModal() { editModal.classList.remove('show'); }
+
+            async function handleEditUser(e) {
+                e.preventDefault();
+                const localDate = document.getElementById('editExpiryDate').value;
+                const localTime = document.getElementById('editExpiryTime').value;
+
+                const { utcDate, utcTime } = localToUTC(localDate, localTime);
+                if (!utcDate || !utcTime) return showToast('Invalid date or time entered.', true);
+                
+                const updatedData = {
+                    exp_date: utcDate,
+                    exp_time: utcTime,
+                    notes: document.getElementById('editNotes').value
+                };
+                
+                try {
+                    await api.put(\`/users/\${document.getElementById('editUuid').value}\`, updatedData);
+                    showToast('User updated successfully!');
+                    closeEditModal();
+                    await fetchAndRenderUsers();
+                } catch (error) { showToast(error.message, true); }
+            }
+            
+            function setDefaultExpiry() {
+                const now = new Date();
+                now.setDate(now.getDate() + 1); // Set expiry to 24 hours from now in LOCAL time
+
+                const year = now.getFullYear();
+                const month = pad(now.getMonth() + 1);
+                const day = pad(now.getDate());
+                const hours = pad(now.getHours());
+                const minutes = pad(now.getMinutes());
+                const seconds = pad(now.getSeconds());
+                
+                document.getElementById('expiryDate').value = \`\${year}-\${month}-\${day}\`;
+                document.getElementById('expiryTime').value = \`\${hours}:\${minutes}:\${seconds}\`;
+            }
+
+            generateUUIDBtn.addEventListener('click', () => uuidInput.value = crypto.randomUUID());
+            createUserForm.addEventListener('submit', handleCreateUser);
+            editUserForm.addEventListener('submit', handleEditUser);
+            editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+            document.getElementById('modalCloseBtn').addEventListener('click', closeEditModal);
+            document.getElementById('modalCancelBtn').addEventListener('click', closeEditModal);
+            userList.addEventListener('click', (e) => {
+                const target = e.target.closest('button');
+                if (!target) return;
+                const uuid = target.dataset.uuid;
+                if (target.classList.contains('btn-edit')) openEditModal(uuid);
+                else if (target.classList.contains('btn-delete')) handleDeleteUser(uuid);
+            });
+
+            setDefaultExpiry();
+            uuidInput.value = crypto.randomUUID();
+            fetchAndRenderUsers();
+        });
+    </script>
+</body>
+</html>
+`;
+
+// ... (The rest of the code from here until generateBeautifulConfigPage remains unchanged) ...
+// ...
+
+async function isAdmin(request, env) {
+    const cookieHeader = request.headers.get('Cookie');
+    if (!cookieHeader) return false;
+
+    const token = cookieHeader.match(/auth_token=([^;]+)/)?.[1];
+    if (!token) return false;
+    
+    const storedToken = await env.USER_KV.get('admin_session_token');
+    
+    return storedToken && storedToken === token;
+}
+
+
+/**
+ * --- Handles all incoming requests to /admin/* routes with API routing. ---
+ * @param {Request} request
+ * @param {object} env
+ * @returns {Promise<Response>}
+ */
+async function handleAdminRequest(request, env) {
+    const url = new URL(request.url);
+    const { pathname } = url;
+    const jsonHeader = { 'Content-Type': 'application/json' };
+
+    if (!env.ADMIN_KEY) {
+        return new Response('Admin panel is not configured.', { status: 503 });
+    }
+
+    // --- API Routes ---
+    if (pathname.startsWith('/admin/api/')) {
+        if (!(await isAdmin(request, env))) {
+            return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: jsonHeader });
+        }
+        
+        // GET /admin/api/users - List all users
+        if (pathname === '/admin/api/users' && request.method === 'GET') {
+            try {
+                const { results } = await env.DB.prepare("SELECT uuid, created_at, expiration_date, expiration_time, notes FROM users ORDER BY created_at DESC").all();
+                return new Response(JSON.stringify(results ?? []), { status: 200, headers: jsonHeader });
+            } catch (e) {
+                return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: jsonHeader });
+            }
+        }
+
+        // POST /admin/api/users - Create a new user
+        if (pathname === '/admin/api/users' && request.method === 'POST') {
+             try {
+                const { uuid, exp_date: expDate, exp_time: expTime, notes } = await request.json();
+
+                if (!uuid || !expDate || !expTime || !/^\d{4}-\d{2}-\d{2}$/.test(expDate) || !/^\d{2}:\d{2}:\d{2}$/.test(expTime)) {
+                    throw new Error('Invalid or missing fields. Use UUID, YYYY-MM-DD, and HH:MM:SS.');
+                }
+                
+                await env.DB.prepare("INSERT INTO users (uuid, expiration_date, expiration_time, notes) VALUES (?, ?, ?, ?)")
+                    .bind(uuid, expDate, expTime, notes || null).run();
+                await env.USER_KV.put(`user:${uuid}`, JSON.stringify({ exp_date: expDate, exp_time: expTime }));
+                
+                return new Response(JSON.stringify({ success: true, uuid }), { status: 201, headers: jsonHeader });
+            } catch (error) {
+                 if (error.message?.includes('UNIQUE constraint failed')) {
+                     return new Response(JSON.stringify({ error: 'A user with this UUID already exists.' }), { status: 409, headers: jsonHeader });
+                 }
+                 return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
+            }
+        }
+        
+        // POST /admin/api/users/bulk-delete - Efficiently delete multiple users
+        if (pathname === '/admin/api/users/bulk-delete' && request.method === 'POST') {
+            try {
+                const { uuids } = await request.json();
+                if (!Array.isArray(uuids) || uuids.length === 0) {
+                    throw new Error('Invalid request body: Expected an array of UUIDs.');
+                }
+                
+                const deleteUserStmt = env.DB.prepare("DELETE FROM users WHERE uuid = ?");
+                const stmts = uuids.map(uuid => deleteUserStmt.bind(uuid));
+                await env.DB.batch(stmts);
+
+                // Delete from KV in parallel for speed
+                await Promise.all(uuids.map(uuid => env.USER_KV.delete(`user:${uuid}`)));
+                
+                return new Response(JSON.stringify({ success: true, count: uuids.length }), { status: 200, headers: jsonHeader });
+            } catch (error) {
+                return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
+            }
+        }
+
+        // PUT /admin/api/users/:uuid - Update a single user
+        const updateMatch = pathname.match(/^\/admin\/api\/users\/([a-f0-9-]+)$/);
+        if (updateMatch && request.method === 'PUT') {
+            const uuid = updateMatch[1];
+            try {
+                const { exp_date: expDate, exp_time: expTime, notes } = await request.json();
+                if (!expDate || !expTime || !/^\d{4}-\d{2}-\d{2}$/.test(expDate) || !/^\d{2}:\d{2}:\d{2}$/.test(expTime)) {
+                    throw new Error('Invalid date/time fields. Use YYYY-MM-DD and HH:MM:SS.');
+                }
+                
+                await env.DB.prepare("UPDATE users SET expiration_date = ?, expiration_time = ?, notes = ? WHERE uuid = ?")
+                    .bind(expDate, expTime, notes || null, uuid).run();
+                await env.USER_KV.put(`user:${uuid}`, JSON.stringify({ exp_date: expDate, exp_time: expTime }));
+                
+                return new Response(JSON.stringify({ success: true, uuid }), { status: 200, headers: jsonHeader });
+            } catch (error) {
+                return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
+            }
+        }
+        
+        // DELETE /admin/api/users/:uuid - Delete a single user
+        if (updateMatch && request.method === 'DELETE') {
+            const uuid = updateMatch[1];
+             try {
+                await env.DB.prepare("DELETE FROM users WHERE uuid = ?").bind(uuid).run();
+                await env.USER_KV.delete(`user:${uuid}`);
+                return new Response(JSON.stringify({ success: true, uuid }), { status: 200, headers: jsonHeader });
+            } catch (error) {
+                return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonHeader });
+            }
+        }
+        
+        return new Response(JSON.stringify({ error: 'API route not found' }), { status: 404, headers: jsonHeader });
+    }
+
+    // --- Page Serving Routes (/admin) ---
+    if (pathname === '/admin') {
+        if (request.method === 'POST') {
+            const formData = await request.formData();
+            if (formData.get('password') === env.ADMIN_KEY) {
+                const token = crypto.randomUUID();
+                await env.USER_KV.put('admin_session_token', token, { expirationTtl: 86400 }); // 24 hour session
+                return new Response(null, {
+                    status: 302,
+                    headers: { 'Location': '/admin', 'Set-Cookie': `auth_token=${token}; HttpOnly; Secure; Path=/admin; Max-Age=86400; SameSite=Strict` },
+                });
+            } else {
+                const loginPageWithError = adminLoginHTML.replace('</form>', '</form><p class="error">Invalid password.</p>');
+                return new Response(loginPageWithError, { status: 401, headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+            }
+        }
+        
+        if (request.method === 'GET') {
+            return new Response(await isAdmin(request, env) ? adminPanelHTML : adminLoginHTML, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
+        }
+        
+        return new Response('Method Not Allowed', { status: 405 });
+    }
+
+    return new Response('Not found', { status: 404 });
+}
+
+
+// --- Original Code (Config, Handlers, etc.) ---
+const Config = {
+  userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
   proxyIPs: ['nima.nscl.ir:443'],
-  
   scamalytics: {
     username: 'revilseptember',
     apiKey: 'b2fc368184deb3d8ac914bd776b8215fe899dd8fef69fbaba77511acfbdeca0d',
     baseUrl: 'https://api12.scamalytics.com/v3/',
   },
-
   socks5: {
     enabled: false,
     relayMode: false,
     address: '',
   },
-
-  /**
-   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
-   */
   fromEnv(env) {
-    const selectedProxyIP =
-      env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
+    const selectedProxyIP = env.PROXYIP || this.proxyIPs[Math.floor(Math.random() * this.proxyIPs.length)];
     const [proxyHost, proxyPort = '443'] = selectedProxyIP.split(':');
-
     return {
       userID: env.UUID || this.userID,
       proxyIP: proxyHost,
@@ -66,12 +743,6 @@ const CONST = {
   WS_READY_STATE_CLOSING: 2,
 };
 
-/**
- * Generates a random path string for WebSocket connection.
- * @param {number} length - Length of the random path part.
- * @param {string} [query] - Optional query string to append (e.g., 'ed=2048').
- * @returns {string} The generated path.
- */
 function generateRandomPath(length = 12, query = '') {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -82,16 +753,13 @@ function generateRandomPath(length = 12, query = '') {
 }
 
 const CORE_PRESETS = {
-  // --- Xray cores – Dream ---
   xray: {
-    tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls',  fp: 'chrome',  alpn: 'http/1.1', extra: {} },
-    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome',                extra: {} },
+    tls: { path: () => generateRandomPath(12, 'ed=2048'), security: 'tls', fp: 'chrome', alpn: 'http/1.1', extra: {} },
+    tcp: { path: () => generateRandomPath(12, 'ed=2048'), security: 'none', fp: 'chrome', extra: {} },
   },
-
-  // ---Singbox cores – Freedom ---
   sb: {
-    tls: { path: () => generateRandomPath(18), security: 'tls',  fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
-    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox',             extra: CONST.ED_PARAMS },
+    tls: { path: () => generateRandomPath(18), security: 'tls', fp: 'firefox', alpn: 'h3', extra: CONST.ED_PARAMS },
+    tcp: { path: () => generateRandomPath(18), security: 'none', fp: 'firefox', extra: CONST.ED_PARAMS },
   },
 };
 
@@ -99,23 +767,17 @@ function makeName(tag, proto) {
   return `${tag}-${proto.toUpperCase()}`;
 }
 
-function createVlessLink({
-  userID, address, port, host, path,
-  security, sni, fp, alpn, extra = {}, name,
-}) {
+function createVlessLink({ userID, address, port, host, path, security, sni, fp, alpn, extra = {}, name }) {
   const params = new URLSearchParams({
     type: 'ws',
     host,
     path,
   });
-
   if (security) params.set('security', security);
-  if (sni)      params.set('sni',      sni);
-  if (fp)       params.set('fp',       fp);
-  if (alpn)     params.set('alpn',     alpn);
-
+  if (sni) params.set('sni', sni);
+  if (fp) params.set('fp', fp);
+  if (alpn) params.set('alpn', alpn);
   for (const [k, v] of Object.entries(extra)) params.set(k, v);
-
   return `vless://${userID}@${address}:${port}?${params.toString()}#${encodeURIComponent(name)}`;
 }
 
@@ -136,13 +798,8 @@ function buildLink({ core, proto, userID, hostName, address, port, tag }) {
   });
 }
 
-const pick = (/** @type {string | any[]} */ arr) => arr[Math.floor(Math.random() * arr.length)];
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-/**
- * @param {string} core
- * @param {any} userID
- * @param {string} hostName
- */
 async function handleIpSubscription(core, userID, hostName) {
   const mainDomains = [
     hostName, 'creativecommons.org', 'www.speedtest.net',
@@ -152,7 +809,7 @@ async function handleIpSubscription(core, userID, hostName) {
   ];
 
   const httpsPorts = [443, 8443, 2053, 2083, 2087, 2096];
-  const httpPorts  = [ 80, 8080, 8880, 2052, 2082, 2086, 2095];
+  const httpPorts = [80, 8080, 8880, 2052, 2082, 2086, 2095];
 
   let links = [];
 
@@ -165,7 +822,7 @@ async function handleIpSubscription(core, userID, hostName) {
 
     if (!isPagesDeployment) {
       links.push(
-        buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts),  tag: `D${i+1}` })
+        buildLink({ core, proto: 'tcp', userID, hostName, address: domain, port: pick(httpPorts), tag: `D${i+1}` })
       );
     }
   });
@@ -174,7 +831,7 @@ async function handleIpSubscription(core, userID, hostName) {
     const r = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
     if (r.ok) {
       const json = await r.json();
-      const ips = [...(json.ipv4||[]), ...(json.ipv6||[])].slice(0, 20).map(x => x.ip);
+      const ips = [...(json.ipv4 || []), ...(json.ipv6 || [])].slice(0, 20).map(x => x.ip);
       ips.forEach((ip, i) => {
         const formattedAddress = ip.includes(':') ? `[${ip}]` : ip;
         links.push(
@@ -183,7 +840,7 @@ async function handleIpSubscription(core, userID, hostName) {
 
         if (!isPagesDeployment) {
           links.push(
-            buildLink({ core, proto: 'tcp', userID, hostName, address: formattedAddress, port: pick(httpPorts),  tag: `IP${i+1}` })
+            buildLink({ core, proto: 'tcp', userID, hostName, address: formattedAddress, port: pick(httpPorts), tag: `IP${i+1}` })
           );
         }
       });
@@ -196,17 +853,17 @@ async function handleIpSubscription(core, userID, hostName) {
 }
 
 export default {
-  /**
-   * @param {Request<any, CfProperties<any>>} request
-   * @param {{ PROXYIP: string; UUID: any; SCAMALYTICS_USERNAME: any; SCAMALYTICS_API_KEY: any; SCAMALYTICS_BASEURL: any; SOCKS5: any; SOCKS5_RELAY: string; }} env
-   * @param {any} ctx
-   */
   async fetch(request, env, ctx) {
     const cfg = Config.fromEnv(env);
     const url = new URL(request.url);
-    
+
+    // --- Admin Panel Route ---
+    if (url.pathname.startsWith('/admin')) {
+      return handleAdminRequest(request, env);
+    }
+
     const upgradeHeader = request.headers.get('Upgrade');
-    if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+    if (upgradeHeader?.toLowerCase() === 'websocket') {
       const requestConfig = {
         userID: cfg.userID,
         proxyIP: cfg.proxyIP,
@@ -214,146 +871,105 @@ export default {
         socks5Address: cfg.socks5.address,
         socks5Relay: cfg.socks5.relayMode,
         enableSocks: cfg.socks5.enabled,
-        parsedSocks5Address: cfg.socks5.enabled
-          ? socks5AddressParser(cfg.socks5.address)
-          : {},
+        parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
       };
 
-      return ProtocolOverWSHandler(request, requestConfig);
+      return await ProtocolOverWSHandler(request, requestConfig, env);
+    }
+
+    if (url.pathname === '/scamalytics-lookup') return handleScamalyticsLookup(request, cfg);
+
+    // Per-user subscription routes
+    const handleSubscription = async (core) => {
+      const uuid = url.pathname.slice(`/${core}/`.length);
+      if (!isValidUUID(uuid)) return new Response('Invalid UUID', { status: 400 });
+      const userData = await getUserData(env, uuid);
+      if (!userData || !(await checkExpiration(userData.exp_date, userData.exp_time))) {
+        return new Response('Invalid or expired user', { status: 403 });
+      }
+      return handleIpSubscription(core, uuid, url.hostname);
+    };
+
+    if (url.pathname.startsWith('/xray/')) {
+      return handleSubscription('xray');
+    }
+
+    if (url.pathname.startsWith('/sb/')) {
+      return handleSubscription('sb');
+    }
+
+    // Per-user config page (user panel)
+    const path = url.pathname.slice(1);
+    if (isValidUUID(path)) {
+      const userData = await getUserData(env, path);
+      if (!userData || !(await checkExpiration(userData.exp_date, userData.exp_time))) {
+        return new Response('Invalid or expired user', { status: 403 });
+      }
+      return handleConfigPage(path, url.hostname, cfg.proxyAddress, userData.exp_date, userData.exp_time);
     }
     
-    if (url.pathname === '/scamalytics-lookup')
-      return handleScamalyticsLookup(request, cfg);
+    // START: ==================== NEW REVERSE PROXY LOGIC ====================
+    // If an environment variable named ROOT_PROXY_URL is set,
+    // this worker will act as a reverse proxy for all unhandled routes.
+    if (env.ROOT_PROXY_URL) {
+      try {
+        const proxyUrl = new URL(env.ROOT_PROXY_URL);
+        const targetUrl = new URL(request.url);
 
-    if (url.pathname.startsWith(`/xray/${cfg.userID}`))
-      return handleIpSubscription('xray', cfg.userID, url.hostname);
+        // Set the destination host, protocol, and port from the proxy URL
+        targetUrl.hostname = proxyUrl.hostname;
+        targetUrl.protocol = proxyUrl.protocol;
+        targetUrl.port = proxyUrl.port;
+        
+        // Create a new request to the target server, preserving the method, headers, and body of the original request
+        const newRequest = new Request(targetUrl, request);
+        
+        // Set the 'Host' header to match the target server, which is crucial for many web servers
+        newRequest.headers.set('Host', proxyUrl.hostname);
 
-    if (url.pathname.startsWith(`/sb/${cfg.userID}`))
-      return handleIpSubscription('sb', cfg.userID, url.hostname);
+        // Send the real user IP
+        newRequest.headers.set('X-Forwarded-For', request.headers.get('CF-Connecting-IP'));
+        newRequest.headers.set('X-Forwarded-Proto', 'https'); // Assume the worker is always accessed via HTTPS
+        
+        // Receive the response from the target server
+        const response = await fetch(newRequest);
+        
+        // Create a new response with mutable headers to send to the user
+        const mutableHeaders = new Headers(response.headers);
 
-    if (url.pathname.startsWith(`/${cfg.userID}`))
-      return handleConfigPage(cfg.userID, url.hostname, cfg.proxyAddress);
+        // Remove headers that might cause security issues or conflicts
+        mutableHeaders.delete('Content-Security-Policy');
+        mutableHeaders.delete('Content-Security-Policy-Report-Only');
+        mutableHeaders.delete('X-Frame-Options');
 
-    return new Response('UUID not found. Please set the UUID environment variable in the Cloudflare dashboard.', { status: 404 });
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: mutableHeaders
+        });
+
+      } catch (e) {
+        // If ROOT_PROXY_URL is invalid or the fetch fails, an error is returned
+        console.error(`Reverse Proxy Error: ${e.message}`);
+        return new Response(`Proxy configuration error or upstream server is down. Please check the ROOT_PROXY_URL variable. Error: ${e.message}`, { status: 502 });
+      }
+    }
+    // END: ==================== NEW REVERSE PROXY LOGIC ====================
+
+
+    return new Response('Not found', { status: 404 });
   },
 };
 
-/**
- * Performs Scamalytics IP lookup using API.
- * @param {Request} request
- * @param {object} config
- * @returns {Promise<Response>}
- */
-async function handleScamalyticsLookup(request, config) {
-  const url = new URL(request.url);
-  const ipToLookup = url.searchParams.get('ip');
-  if (!ipToLookup) {
-    return new Response(JSON.stringify({ error: 'Missing IP parameter' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
 
-  const { username, apiKey, baseUrl } = config.scamalytics;
-  if (!username || !apiKey) {
-    return new Response(JSON.stringify({ error: 'Scamalytics API credentials not configured.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
-  const headers = new Headers({
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-  });
-
-  try {
-    const scamalyticsResponse = await fetch(scamalyticsUrl);
-    const responseBody = await scamalyticsResponse.json();
-    return new Response(JSON.stringify(responseBody), { headers });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.toString() }), {
-      status: 500,
-      headers,
-    });
-  }
-}
-
-/**
- * @param {any} userID
- * @param {string} hostName
- * @param {string} proxyAddress
- */
-function handleConfigPage(userID, hostName, proxyAddress) {
-  const html = generateBeautifulConfigPage(userID, hostName, proxyAddress);
-  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-}
-
-/**
- * @param {any} userID
- * @param {string} hostName
- * @param {string} proxyAddress
- */
-function generateBeautifulConfigPage(userID, hostName, proxyAddress) {
-  const dream = buildLink({
-    core: 'xray', proto: 'tls', userID, hostName,
-    address: hostName, port: 443, tag: `${hostName}-Xray`,
-  });
-
-  const freedom = buildLink({
-    core: 'sb',   proto: 'tls', userID, hostName,
-    address: hostName, port: 443, tag: `${hostName}-Singbox`,
-  });
-  
-  const configs = { dream, freedom };
-  const subXrayUrl = `https://${hostName}/xray/${userID}`;
-  const subSbUrl   = `https://${hostName}/sb/${userID}`;
-  
-  const clientUrls = {
-    clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
-    hiddify: `hiddify://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
-  };
-
-  let finalHTML = `
-  <!doctype html>
-  <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>VLESS Proxy Configuration</title>
-    <link rel="icon" href="https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Legacy/assets/favicon.png" type="image/png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
-    <style>${getPageCSS()}</style> 
-  </head>
-  <body data-proxy-ip="${proxyAddress}">
-    ${getPageHTML(configs, clientUrls)}
-    <script>${getPageScript()}</script>
-  </body>
-  </html>`;
-
-  return finalHTML;
-}
-
-/**
- * Core vless protocol logic
- * Handles VLESS protocol over WebSocket.
- * @param {Request} request
- * @param {object} config
- * @returns {Promise<Response>}
- */
-async function ProtocolOverWSHandler(request, config) {
+async function ProtocolOverWSHandler(request, config, env) {
   const webSocketPair = new WebSocketPair();
   const [client, webSocket] = Object.values(webSocketPair);
   webSocket.accept();
   let address = '';
   let portWithRandomLog = '';
   let udpStreamWriter = null;
-  const log = (/** @type {string} */ info, /** @type {undefined} */ event) => {
+  const log = (info, event) => {
     console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
   };
   const earlyDataHeader = request.headers.get('Sec-WebSocket-Protocol') || '';
@@ -385,13 +1001,14 @@ async function ProtocolOverWSHandler(request, config) {
             rawDataIndex,
             ProtocolVersion = new Uint8Array([0, 0]),
             isUDP,
-          } = ProcessProtocolHeader(chunk, config.userID);
+          } = await ProcessProtocolHeader(chunk, env);
 
           address = addressRemote;
           portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'} `;
 
           if (hasError) {
-            throw new Error(message);
+            controller.error(message);
+            return;
           }
 
           const vlessResponseHeader = new Uint8Array([ProtocolVersion[0], 0]);
@@ -401,9 +1018,9 @@ async function ProtocolOverWSHandler(request, config) {
             if (portRemote === 53) {
               const dnsPipeline = await createDnsPipeline(webSocket, vlessResponseHeader, log);
               udpStreamWriter = dnsPipeline.write;
-              udpStreamWriter(rawClientData);
+              await udpStreamWriter(rawClientData);
             } else {
-              throw new Error('UDP proxy is only enabled for DNS (port 53)');
+              controller.error('UDP proxy only for DNS (port 53)');
             }
             return;
           }
@@ -435,26 +1052,61 @@ async function ProtocolOverWSHandler(request, config) {
   return new Response(null, { status: 101, webSocket: client });
 }
 
-/**
- * @param {string} uuid
- */
-function isValidUUID(uuid) {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
+async function ProcessProtocolHeader(protocolBuffer, env) {
+  if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
+
+  const dataView = new DataView(protocolBuffer);
+  const version = dataView.getUint8(0);
+  const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
+
+  const userData = await getUserData(env, slicedBufferString);
+
+  if (!userData || !(await checkExpiration(userData.exp_date, userData.exp_time))) {
+    return { hasError: true, message: 'invalid or expired user' };
+  }
+
+  const optLength = dataView.getUint8(17);
+  const command = dataView.getUint8(18 + optLength);
+  if (command !== 1 && command !== 2) return { hasError: true, message: `command ${command} is not supported` };
+
+  const portIndex = 18 + optLength + 1;
+  const portRemote = dataView.getUint16(portIndex);
+  const addressType = dataView.getUint8(portIndex + 2);
+  let addressValue, addressLength, addressValueIndex;
+
+  switch (addressType) {
+    case 1: // IPv4
+      addressLength = 4;
+      addressValueIndex = portIndex + 3;
+      addressValue = new Uint8Array(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join('.');
+      break;
+    case 2: // Domain
+      addressLength = dataView.getUint8(portIndex + 3);
+      addressValueIndex = portIndex + 4;
+      addressValue = new TextDecoder().decode(protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+      break;
+    case 3: // IPv6
+      addressLength = 16;
+      addressValueIndex = portIndex + 3;
+      addressValue = Array.from({ length: 8 }, (_, i) => dataView.getUint16(addressValueIndex + i * 2).toString(16)).join(':');
+      break;
+    default:
+      return { hasError: true, message: `invalid addressType: ${addressType}` };
+  }
+
+  if (!addressValue) return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
+
+  return {
+    hasError: false,
+    addressRemote: addressValue,
+    addressType,
+    portRemote,
+    rawDataIndex: addressValueIndex + addressLength,
+    ProtocolVersion: new Uint8Array([version]),
+    isUDP: command === 2,
+  };
 }
 
-/**
- * Handles TCP outbound logic for VLESS.
- * @param {{ value: any; }} remoteSocket
- * @param {number} addressType
- * @param {string} addressRemote
- * @param {number} portRemote
- * @param {any} rawClientData
- * @param {WebSocket} webSocket
- * @param {Uint8Array} protocolResponseHeader
- * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
- * @param {{ socks5Relay: any; parsedSocks5Address: any; enableSocks: any; proxyIP: any; proxyPort: any; userID?: string; socks5Address?: string; }} config
- */
 async function HandleTCPOutBound(
   remoteSocket,
   addressType,
@@ -466,22 +1118,6 @@ async function HandleTCPOutBound(
   log,
   config,
 ) {
-  if (!config) {
-    config = {
-      userID: 'd342d11e-d424-4583-b36e-524ab1f0afa4',
-      socks5Address: '',
-      socks5Relay: false,
-      proxyIP: 'nima.nscl.ir',
-      proxyPort: '443',
-      enableSocks: false,
-      parsedSocks5Address: {},
-    };
-  }
-
-  /**
-   * @param {string} address
-   * @param {number} port
-   */
   async function connectAndWrite(address, port, socks = false) {
     let tcpSocket;
     if (config.socks5Relay) {
@@ -503,10 +1139,10 @@ async function HandleTCPOutBound(
     const tcpSocket = config.enableSocks
       ? await connectAndWrite(addressRemote, portRemote, true)
       : await connectAndWrite(
-        config.proxyIP || addressRemote,
-        config.proxyPort || portRemote,
-        false,
-      );
+          config.proxyIP || addressRemote,
+          config.proxyPort || portRemote,
+          false,
+        );
 
     tcpSocket.closed
       .catch(error => {
@@ -522,21 +1158,15 @@ async function HandleTCPOutBound(
   RemoteSocketToWS(tcpSocket, webSocket, protocolResponseHeader, retry, log);
 }
 
-/**
- * Converts WebSocket messages to a readable stream.
- * @param {WebSocket} webSocketServer
- * @param {string} earlyDataHeader
- * @param {{ (info: any, event: any): void; (arg0: string): void; }} log
- */
 function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   return new ReadableStream({
     start(controller) {
-      webSocketServer.addEventListener('message', (/** @type {{ data: any; }} */ event) => controller.enqueue(event.data));
+      webSocketServer.addEventListener('message', (event) => controller.enqueue(event.data));
       webSocketServer.addEventListener('close', () => {
         safeCloseWebSocket(webSocketServer);
         controller.close();
       });
-      webSocketServer.addEventListener('error', (/** @type {any} */ err) => {
+      webSocketServer.addEventListener('error', (err) => {
         log('webSocketServer has error');
         controller.error(err);
       });
@@ -552,81 +1182,6 @@ function MakeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
   });
 }
 
-
-/**
- * Parses and validates VLESS protocol header.
- * @param {ArrayBufferLike & { BYTES_PER_ELEMENT?: never; }} protocolBuffer
- * @param {string} userID
- */
-function ProcessProtocolHeader(protocolBuffer, userID) {
-  if (protocolBuffer.byteLength < 24) return { hasError: true, message: 'invalid data' };
-
-  const dataView = new DataView(protocolBuffer);
-  const version = dataView.getUint8(0);
-  const slicedBufferString = stringify(new Uint8Array(protocolBuffer.slice(1, 17)));
-  const uuids = userID.split(',').map((/** @type {string} */ id) => id.trim());
-  const isValidUser = uuids.some((/** @type {string} */ uuid) => slicedBufferString === uuid);
-
-  if (!isValidUser) return { hasError: true, message: 'invalid user' };
-
-  const optLength = dataView.getUint8(17);
-  const command = dataView.getUint8(18 + optLength);
-  if (command !== 1 && command !== 2)
-    return { hasError: true, message: `command ${command} is not supported` };
-
-  const portIndex = 18 + optLength + 1;
-  const portRemote = dataView.getUint16(portIndex);
-  const addressType = dataView.getUint8(portIndex + 2);
-  let addressValue, addressLength, addressValueIndex;
-
-  switch (addressType) {
-    case 1: // IPv4
-      addressLength = 4;
-      addressValueIndex = portIndex + 3;
-      addressValue = new Uint8Array(
-        protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength),
-      ).join('.');
-      break;
-    case 2: // Domain
-      addressLength = dataView.getUint8(portIndex + 3);
-      addressValueIndex = portIndex + 4;
-      addressValue = new TextDecoder().decode(
-        protocolBuffer.slice(addressValueIndex, addressValueIndex + addressLength),
-      );
-      break;
-    case 3: // IPv6
-      addressLength = 16;
-      addressValueIndex = portIndex + 3;
-      addressValue = Array.from({ length: 8 }, (_, i) =>
-        dataView.getUint16(addressValueIndex + i * 2).toString(16),
-      ).join(':');
-      break;
-    default:
-      return { hasError: true, message: `invalid addressType: ${addressType}` };
-  }
-
-  if (!addressValue)
-    return { hasError: true, message: `addressValue is empty, addressType is ${addressType}` };
-
-  return {
-    hasError: false,
-    addressRemote: addressValue,
-    addressType,
-    portRemote,
-    rawDataIndex: addressValueIndex + addressLength,
-    ProtocolVersion: new Uint8Array([version]),
-    isUDP: command === 2,
-  };
-}
-
-/**
- * Pipes remote socket data to WebSocket.
- * @param {Socket} remoteSocket
- * @param {WebSocket} webSocket
- * @param {string | Uint8Array | ArrayBuffer | ArrayBufferView | Blob} protocolResponseHeader
- * @param {{ (): Promise<void>; (): any; }} retry
- * @param {{ (info: any, event: any): void; (arg0: string): void; (info: any, event: any): void; (arg0: string): void; (arg0: string): void; }} log
- */
 async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader, retry, log) {
   let hasIncomingData = false;
   try {
@@ -656,14 +1211,10 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
   }
   if (!hasIncomingData && retry) {
     log(`No incoming data, retrying`);
-    await retry();
+    retry();
   }
 }
 
-/**
- * decodes base64 string to ArrayBuffer.
- * @param {string} base64Str
- */
 function base64ToArrayBuffer(base64Str) {
   if (!base64Str) return { earlyData: null, error: null };
   try {
@@ -679,10 +1230,6 @@ function base64ToArrayBuffer(base64Str) {
   }
 }
 
-/**
- * Safely closes a WebSocket connection.
- * @param {{ readyState: number; close: () => void; }} socket
- */
 function safeCloseWebSocket(socket) {
   try {
     if (
@@ -698,9 +1245,6 @@ function safeCloseWebSocket(socket) {
 
 const byteToHex = Array.from({ length: 256 }, (_, i) => (i + 0x100).toString(16).slice(1));
 
-/*
- * @param {Uint8Array | (string | number)[]} arr
- */
 function unsafeStringify(arr, offset = 0) {
   return (
     byteToHex[arr[offset]] +
@@ -726,27 +1270,16 @@ function unsafeStringify(arr, offset = 0) {
   ).toLowerCase();
 }
 
-/*
- * @param {Uint8Array} arr
- */
 function stringify(arr, offset = 0) {
   const uuid = unsafeStringify(arr, offset);
   if (!isValidUUID(uuid)) throw new TypeError('Stringified UUID is invalid');
   return uuid;
 }
 
-/**
- * DNS pipeline for UDP DNS requests, using DNS-over-HTTPS, (REvil Method).
- * @param {WebSocket} webSocket
- * @param {Uint8Array} vlessResponseHeader
- * @param {Function} log
- * @returns {Promise<{write: Function}>}
- */
 async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
   let isHeaderSent = false;
   const transformStream = new TransformStream({
     transform(chunk, controller) {
-      // Parse UDP packets from VLESS framing
       for (let index = 0; index < chunk.byteLength;) {
         const lengthBuffer = chunk.slice(index, index + 2);
         const udpPacketLength = new DataView(lengthBuffer).getUint16(0);
@@ -762,7 +1295,6 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
       new WritableStream({
         async write(chunk) {
           try {
-            // Send DNS query using DoH
             const resp = await fetch(`https://1.1.1.1/dns-query`, {
               method: 'POST',
               headers: { 'content-type': 'application/dns-message' },
@@ -799,18 +1331,10 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
 
   const writer = transformStream.writable.getWriter();
   return {
-    write: (/** @type {any} */ chunk) => writer.write(chunk),
+    write: (chunk) => writer.write(chunk),
   };
 }
 
-/**
- * SOCKS5 TCP connection logic.
- * @param {any} addressType
- * @param {string} addressRemote
- * @param {number} portRemote
- * @param {any} log
- * @param {{ username: any; password: any; hostname: any; port: any; }} parsedSocks5Addr
- */
 async function socks5Connect(addressType, addressRemote, portRemote, log, parsedSocks5Addr) {
   const { username, password, hostname, port } = parsedSocks5Addr;
   const socket = connect({ hostname, port });
@@ -850,7 +1374,7 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
         4,
         ...addressRemote
           .split(':')
-          .flatMap((/** @type {string} */ x) => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)]),
+          .flatMap((x) => [parseInt(x.slice(0, 2), 16), parseInt(x.slice(2), 16)]),
       ]);
       break;
     default:
@@ -867,11 +1391,6 @@ async function socks5Connect(addressType, addressRemote, portRemote, log, parsed
   return socket;
 }
 
-/**
- * Parses SOCKS5 address string.
- * @param {string} address
- * @returns {object}
- */
 function socks5AddressParser(address) {
   try {
     const [authPart, hostPart] = address.includes('@') ? address.split('@') : [null, address];
@@ -890,9 +1409,117 @@ function socks5AddressParser(address) {
   }
 }
 
-/**
- * @returns {string} CSS content of the page.
- */
+function isValidUUID(uuid) {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+async function handleScamalyticsLookup(request, config) {
+  const url = new URL(request.url);
+  const ipToLookup = url.searchParams.get('ip');
+  if (!ipToLookup) {
+    return new Response(JSON.stringify({ error: 'Missing IP parameter' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const { username, apiKey, baseUrl } = config.scamalytics;
+  if (!username || !apiKey) {
+    return new Response(JSON.stringify({ error: 'Scamalytics API credentials not configured.' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  const scamalyticsUrl = `${baseUrl}${username}/?key=${apiKey}&ip=${ipToLookup}`;
+  const headers = new Headers({
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
+
+  try {
+    const scamalyticsResponse = await fetch(scamalyticsUrl);
+    const responseBody = await scamalyticsResponse.json();
+    return new Response(JSON.stringify(responseBody), { headers });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: error.toString() }), {
+      status: 500,
+      headers,
+    });
+  }
+}
+
+function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
+  const html = generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate, expTime);
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// ############# MODIFIED SECTION #############
+
+function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
+  const dream = buildLink({
+    core: 'xray', proto: 'tls', userID, hostName,
+    address: hostName, port: 443, tag: `${hostName}-Xray`,
+  });
+
+  const freedom = buildLink({
+    core: 'sb',   proto: 'tls', userID, hostName,
+    address: hostName, port: 443, tag: `${hostName}-Singbox`,
+  });
+  
+  const configs = { dream, freedom };
+  const subXrayUrl = `https://${hostName}/xray/${userID}`;
+  const subSbUrl   = `https://${hostName}/sb/${userID}`;
+  
+  const clientUrls = {
+    clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
+    // Hiddify removed, Npv Tunnel and Karing added below
+    npvTunnel: `npvtunnel://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
+  };
+  
+  // START: *** PROFESSIONAL TIMEZONE ENHANCEMENT ***
+  // We will now pass the raw UTC time to the HTML and let client-side JavaScript handle the display.
+  // This makes the display intelligent and user-friendly.
+  let expirationBlock = '';
+  if (expDate && expTime) {
+      const utcTimestamp = `${expDate}T${expTime.split('.')[0]}Z`;
+      expirationBlock = `<p id="expiration-display" data-utc-time="${utcTimestamp}">
+          Loading expiration time...
+      </p>`;
+  } else {
+      expirationBlock = '<p>No expiration date set.</p>';
+  }
+  // END: *** PROFESSIONAL TIMEZONE ENHANCEMENT ***
+
+  let finalHTML = `
+  <!doctype html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VLESS Proxy Configuration</title>
+    <link rel="icon" href="https://raw.githubusercontent.com/NiREvil/zizifn/refs/heads/Legacy/assets/favicon.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
+    <style>${getPageCSS()}</style> 
+  </head>
+  <body data-proxy-ip="${proxyAddress}">
+    ${getPageHTML(configs, clientUrls).replace(
+        '<p>Copy the configuration or import directly into your client</p>', 
+        `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
+    )}
+    <script>${getPageScript()}</script>
+  </body>
+  </html>`;
+
+  return finalHTML;
+}
+
 function getPageCSS() {
   return `
       * {
@@ -932,6 +1559,9 @@ function getPageCSS() {
         background-color: var(--background-primary); color: var(--text-primary);
         padding: 3rem; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       }
+      #expiration-display { font-size: 0.9em; text-align: center; color: var(--text-secondary); margin-top: 8px; }
+      #expiration-display span { display: block; margin-top: 4px; font-size: 0.9em; }
+      #expiration-display strong { color: var(--text-primary); }
       .container {
         max-width: 800px; margin: 20px auto; padding: 0 12px; border-radius: var(--border-radius);
         box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2), 0 0 25px 8px var(--shadow-color-accent);
@@ -942,8 +1572,7 @@ function getPageCSS() {
       .header h1 { font-family: var(--serif); font-weight: 400; font-size: 1.8rem; color: var(--text-accent); margin-top: 0px; margin-bottom: 2px; }
       .header p { color: var(--text-secondary); font-size: 0.6rem; font-weight: 400; }
       .config-card {
-        background: var(--background-secondary); border-radius: var(--border-radius); padding: 20px; margin-bottom: 24px;
-        border: 1px solid var(--border-color);
+        background: var(--background-secondary); border-radius: var(--border-radius); padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-color);
         transition: border-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
       }
       .config-card:hover { border-color: var(--border-color-hover); box-shadow: 0 4px 8px var(--shadow-color); }
@@ -1074,17 +1703,15 @@ function getPageCSS() {
 	      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
 	      .ip-info-section { padding: 14px; gap: 16px; }
 	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; }
-	      .ip-info-content { gap: 6px; } .ip-info-header svg { width: 18px; height: 18px; }
-	      .ip-info-item .label { font-size: 9px; } .ip-info-item .value { font-size: 11px; }
-	      .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
+	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
+	      .ip-info-header svg { width: 18px; height: 18px; } .ip-info-item .label { font-size: 9px; }
+	      .ip-info-item .value { font-size: 11px; } .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
 	      .config-card { padding: 10px; } .config-title { font-size: 16px; }
 	      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
 	      .config-content pre { font-size: 10px; }
 	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; }
-	      .footer { font-size: 10px; }
-	    }
+	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; } .footer { font-size: 10px; }
+	      }
 	    @media (max-width: 359px) {
           body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
           .header h1 { font-size: 16px; } .header p { font-size: 6px; }
@@ -1107,11 +1734,6 @@ function getPageCSS() {
   `;
 }
 
-/**
- * @param {object} configs - Object containing configuration links.
- * @param {object} clientUrls - Object containing client URLs.
- * @returns {string} The HTML body content of the page.
- */
 function getPageHTML(configs, clientUrls) {
   return `
     <div class="container">
@@ -1173,9 +1795,13 @@ function getPageHTML(configs, clientUrls) {
         </div>
         <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
         <div class="client-buttons">
-          <a href="${clientUrls.hiddify}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg></span>
-            <span class="button-text">Import to Hiddify</span>
+          <a href="${clientUrls.npvTunnel}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to Npv Tunnel</span>
+          </a>
+          <a href="${clientUrls.karing}" class="button client-btn">
+             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+             <span class="button-text">Import to Karing</span>
           </a>
           <a href="${clientUrls.v2rayng}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
@@ -1213,11 +1839,6 @@ function getPageHTML(configs, clientUrls) {
   `;
 }
 
-/**
- * @returns {string} Client-side JavaScript
- * This function is self-contained and doesn't need template literals from the server.
- * Using a template literal here is just for multi-line string formatting.
- */
 function getPageScript() {
   return `
       function copyToClipboard(button, text) {
@@ -1398,6 +2019,36 @@ function getPageScript() {
         }
       }
 
+      function displayExpirationTimes() {
+        const expElement = document.getElementById('expiration-display');
+        if (!expElement || !expElement.dataset.utcTime) {
+            if (expElement) expElement.textContent = 'Expiration time not available.';
+            return;
+        }
+
+        const utcDate = new Date(expElement.dataset.utcTime);
+        if (isNaN(utcDate.getTime())) {
+            expElement.textContent = 'Invalid expiration time format.';
+            return;
+        }
+        
+        const commonOptions = {
+            year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: true, timeZoneName: 'short'
+        };
+
+        const localTimeStr = utcDate.toLocaleString(undefined, commonOptions);
+        const tehranTimeStr = utcDate.toLocaleString('en-US', { ...commonOptions, timeZone: 'Asia/Tehran' });
+        const utcTimeStr = utcDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+
+        expElement.innerHTML = \`
+          <span><strong>Your Local Time:</strong> \${localTimeStr}</span>
+          <span><strong>Tehran Time:</strong> \${tehranTimeStr}</span>
+          <span><strong>Universal Time:</strong> \${utcTimeStr}</span>
+        \`;
+      }
+
       document.getElementById('refresh-ip-info')?.addEventListener('click', function() {
         const button = this;
         const icon = button.querySelector('.refresh-icon');
@@ -1427,6 +2078,7 @@ function getPageScript() {
 
       document.addEventListener('DOMContentLoaded', () => {
         loadNetworkInfo();
+        displayExpirationTimes(); // Call the new function to display times
       });
   `;
 }
