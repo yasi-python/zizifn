@@ -1,17 +1,21 @@
 import { connect } from 'cloudflare:sockets';
 
 // Helper functions (updated for robustness)
+/**
+ * Generates a standard RFC4122 version 4 UUID.
+ * @returns {string} A new UUID.
+ */
 function generateUUID() {
   return crypto.randomUUID();
 }
 
 /**
- * Checks if the expiration date and time are in the future.
- * Treats the stored time as UTC to prevent timezone ambiguity.
- * @param {string} expDate - The expiration date in 'YYYY-MM-DD' format.
- * @param {string} expTime - The expiration time in 'HH:MM:SS' format.
- * @returns {boolean} - True if the expiration is in the future, otherwise false.
- */
+* Checks if the expiration date and time are in the future.
+* Treats the stored time as UTC to prevent timezone ambiguity.
+* @param {string} expDate - The expiration date in 'YYYY-MM-DD' format.
+* @param {string} expTime - The expiration time in 'HH:MM:SS' format.
+* @returns {boolean} - True if the expiration is in the future, otherwise false.
+*/
 async function checkExpiration(expDate, expTime) {
   if (!expDate || !expTime) return false;
   const expDatetimeUTC = new Date(`${expDate}T${expTime}Z`);
@@ -19,17 +23,19 @@ async function checkExpiration(expDate, expTime) {
 }
 
 /**
- * Retrieves user data from KV cache or falls back to D1 database.
- * @param {object} env - The worker environment object.
- * @param {string} uuid - The user's UUID.
- * @returns {Promise<object|null>} - The user data or null if not found.
- */
+* Retrieves user data from KV cache or falls back to D1 database.
+* @param {object} env - The worker environment object.
+* @param {string} uuid - The user's UUID.
+* @returns {Promise<object|null>} - The user data or null if not found.
+*/
 async function getUserData(env, uuid) {
   let userData = await env.USER_KV.get(`user:${uuid}`);
   if (userData) {
     try {
       return JSON.parse(userData);
-    } catch (e) {}
+    } catch (e) {
+      console.error(`Failed to parse user data from KV for UUID: ${uuid}`, e);
+    }
   }
 
   const query = await env.DB.prepare("SELECT expiration_date, expiration_time FROM users WHERE uuid = ?")
@@ -48,8 +54,7 @@ async function getUserData(env, uuid) {
 // --- Admin Security & Panel ---
 
 // HTML for the Admin Login Page
-const adminLoginHTML = `
-<!DOCTYPE html>
+const adminLoginHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -76,12 +81,10 @@ const adminLoginHTML = `
         </form>
         </div>
 </body>
-</html>
-`;
+</html>`;
 
 // --- FINAL, COMPLETE, AND TIMEZONE-SMART ADMIN PANEL HTML ---
-const adminPanelHTML = `
-<!DOCTYPE html>
+const adminPanelHTML = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -142,8 +145,6 @@ const adminPanelHTML = `
         .time-display { display: flex; flex-direction: column; }
         .time-local { font-weight: 600; }
         .time-utc, .time-relative { font-size: 11px; color: var(--text-secondary); }
-
-        /* --- MODAL STYLES --- */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: opacity 0.3s, visibility 0.3s; }
         .modal-overlay.show { opacity: 1; visibility: visible; }
         .modal-content { background-color: var(--bg-card); padding: 30px; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.4); width: 90%; max-width: 500px; transform: scale(0.9); transition: transform 0.3s; border: 1px solid var(--border); }
@@ -152,15 +153,12 @@ const adminPanelHTML = `
         .modal-header h2 { margin: 0; border: none; font-size: 20px; }
         .modal-close-btn { background: none; border: none; color: var(--text-secondary); font-size: 24px; cursor: pointer; line-height: 1; }
         .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 25px; }
-
-        /* --- NEW: INTELLIGENT TIME SETTER STYLES --- */
         .time-quick-set-group { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
         .btn-outline-secondary {
             background-color: transparent; border: 1px solid var(--btn-secondary-bg); color: var(--text-secondary);
             padding: 6px 10px; font-size: 12px; font-weight: 500;
         }
         .btn-outline-secondary:hover { background-color: var(--btn-secondary-bg); color: white; border-color: var(--btn-secondary-bg); }
-
         @media (max-width: 768px) {
             tr { border: 1px solid var(--border); border-radius: 8px; display: block; margin-bottom: 1rem; }
             td { border: none; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -264,18 +262,10 @@ const adminPanelHTML = `
                 return response.status === 204 ? null : response.json();
             }
 
-            // --- HELPER: Pad number with leading zero ---
             const pad = (num) => num.toString().padStart(2, '0');
 
-            /**
-             * --- TIMEZONE-AWARE: Converts a local date and time from form inputs to a UTC date and time object. ---
-             * @param {string} dateStr - Date string from <input type="date"> (YYYY-MM-DD).
-             * @param {string} timeStr - Time string from <input type="time"> (HH:MM or HH:MM:SS).
-             * @returns {{utcDate: string, utcTime: string}} - Object with UTC date and time strings.
-             */
             function localToUTC(dateStr, timeStr) {
                 if (!dateStr || !timeStr) return { utcDate: '', utcTime: '' };
-                 // Combine local date and time into a single string that JS Date constructor understands
                 const localDateTime = new Date(\`\${dateStr}T\${timeStr}\`);
                 if (isNaN(localDateTime)) return { utcDate: '', utcTime: '' };
 
@@ -285,24 +275,18 @@ const adminPanelHTML = `
                 const hours = pad(localDateTime.getUTCHours());
                 const minutes = pad(localDateTime.getUTCMinutes());
                 const seconds = pad(localDateTime.getUTCSeconds());
-                
+
                 return {
                     utcDate: \`\${year}-\${month}-\${day}\`,
                     utcTime: \`\${hours}:\${minutes}:\${seconds}\`
                 };
             }
 
-            /**
-             * --- TIMEZONE-AWARE: Converts a UTC date and time to local date and time for form inputs. ---
-             * @param {string} utcDateStr - UTC date string (YYYY-MM-DD).
-             * @param {string} utcTimeStr - UTC time string (HH:MM:SS).
-             * @returns {{localDate: string, localTime: string}} - Object with local date and time strings.
-             */
             function utcToLocal(utcDateStr, utcTimeStr) {
                 if (!utcDateStr || !utcTimeStr) return { localDate: '', localTime: '' };
                 const utcDateTime = new Date(\`\${utcDateStr}T\${utcTimeStr}Z\`);
                 if (isNaN(utcDateTime)) return { localDate: '', localTime: '' };
-                
+
                 const year = utcDateTime.getFullYear();
                 const month = pad(utcDateTime.getMonth() + 1);
                 const day = pad(utcDateTime.getDate());
@@ -315,14 +299,11 @@ const adminPanelHTML = `
                     localTime: \`\${hours}:\${minutes}:\${seconds}\`
                 };
             }
-            
-            /**
-             * --- HELPER: Adds time to local date/time inputs. ---
-             */
+
             function addExpiryTime(dateInputId, timeInputId, amount, unit) {
                 const dateInput = document.getElementById(dateInputId);
                 const timeInput = document.getElementById(timeInputId);
-                
+
                 let date = new Date(\`\${dateInput.value}T\${timeInput.value || '00:00:00'}\`);
                 if (isNaN(date.getTime())) {
                     date = new Date();
@@ -331,7 +312,7 @@ const adminPanelHTML = `
                 if (unit === 'hour') date.setHours(date.getHours() + amount);
                 else if (unit === 'day') date.setDate(date.getDate() + amount);
                 else if (unit === 'month') date.setMonth(date.getMonth() + amount);
-                
+
                 const year = date.getFullYear();
                 const month = pad(date.getMonth() + 1);
                 const day = pad(date.getDate());
@@ -355,11 +336,10 @@ const adminPanelHTML = `
                 );
             });
 
-            // START: *** PROFESSIONAL TIME FORMATTING ENHANCEMENT ***
             function formatExpiryDateTime(expDateStr, expTimeStr) {
                 const expiryUTC = new Date(\`\${expDateStr}T\${expTimeStr}Z\`);
                 if (isNaN(expiryUTC)) return { local: 'Invalid Date', utc: '', relative: '', tehran: '', isExpired: true };
-                
+
                 const now = new Date();
                 const isExpired = expiryUTC < now;
 
@@ -368,16 +348,10 @@ const adminPanelHTML = `
                     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short'
                 };
 
-                // 1. Admin's Local Time
                 const localTime = expiryUTC.toLocaleString(undefined, commonOptions);
-
-                // 2. Tehran Time (GMT+03:30)
                 const tehranTime = expiryUTC.toLocaleString('en-US', { ...commonOptions, timeZone: 'Asia/Tehran' });
-
-                // 3. UTC Time
                 const utcTime = expiryUTC.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
 
-                // 4. Relative Time
                 const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
                 const diffSeconds = (expiryUTC.getTime() - now.getTime()) / 1000;
                 let relativeTime = '';
@@ -388,7 +362,6 @@ const adminPanelHTML = `
 
                 return { local: localTime, tehran: tehranTime, utc: utcTime, relative: relativeTime, isExpired };
             }
-            // END: *** PROFESSIONAL TIME FORMATTING ENHANCEMENT ***
 
             function renderUsers() {
                 userList.innerHTML = '';
@@ -427,7 +400,7 @@ const adminPanelHTML = `
                     });
                 }
             }
-            
+
             async function fetchAndRenderUsers() {
                 try {
                     allUsers = await api.get('/users');
@@ -440,7 +413,7 @@ const adminPanelHTML = `
                 e.preventDefault();
                 const localDate = document.getElementById('expiryDate').value;
                 const localTime = document.getElementById('expiryTime').value;
-                
+
                 const { utcDate, utcTime } = localToUTC(localDate, localTime);
                 if (!utcDate || !utcTime) return showToast('Invalid date or time entered.', true);
 
@@ -493,13 +466,13 @@ const adminPanelHTML = `
 
                 const { utcDate, utcTime } = localToUTC(localDate, localTime);
                 if (!utcDate || !utcTime) return showToast('Invalid date or time entered.', true);
-                
+
                 const updatedData = {
                     exp_date: utcDate,
                     exp_time: utcTime,
                     notes: document.getElementById('editNotes').value
                 };
-                
+
                 try {
                     await api.put(\`/users/\${document.getElementById('editUuid').value}\`, updatedData);
                     showToast('User updated successfully!');
@@ -507,7 +480,7 @@ const adminPanelHTML = `
                     await fetchAndRenderUsers();
                 } catch (error) { showToast(error.message, true); }
             }
-            
+
             function setDefaultExpiry() {
                 const now = new Date();
                 now.setDate(now.getDate() + 1); // Set expiry to 24 hours from now in LOCAL time
@@ -518,7 +491,7 @@ const adminPanelHTML = `
                 const hours = pad(now.getHours());
                 const minutes = pad(now.getMinutes());
                 const seconds = pad(now.getSeconds());
-                
+
                 document.getElementById('expiryDate').value = \`\${year}-\${month}-\${day}\`;
                 document.getElementById('expiryTime').value = \`\${hours}:\${minutes}:\${seconds}\`;
             }
@@ -543,11 +516,7 @@ const adminPanelHTML = `
         });
     </script>
 </body>
-</html>
-`;
-
-// ... (The rest of the code from here until generateBeautifulConfigPage remains unchanged) ...
-// ...
+</html>`;
 
 async function isAdmin(request, env) {
     const cookieHeader = request.headers.get('Cookie');
@@ -555,19 +524,18 @@ async function isAdmin(request, env) {
 
     const token = cookieHeader.match(/auth_token=([^;]+)/)?.[1];
     if (!token) return false;
-    
+
     const storedToken = await env.USER_KV.get('admin_session_token');
-    
+
     return storedToken && storedToken === token;
 }
 
-
 /**
- * --- Handles all incoming requests to /admin/* routes with API routing. ---
- * @param {Request} request
- * @param {object} env
- * @returns {Promise<Response>}
- */
+* --- Handles all incoming requests to /admin/* routes with API routing. ---
+* @param {Request} request
+* @param {object} env
+* @returns {Promise<Response>}
+*/
 async function handleAdminRequest(request, env) {
     const url = new URL(request.url);
     const { pathname } = url;
@@ -581,6 +549,14 @@ async function handleAdminRequest(request, env) {
     if (pathname.startsWith('/admin/api/')) {
         if (!(await isAdmin(request, env))) {
             return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: jsonHeader });
+        }
+        
+        // --- ENHANCEMENT: Basic CSRF protection for mutating requests ---
+        if (request.method !== 'GET') {
+            const origin = request.headers.get('Origin');
+            if (!origin || new URL(origin).hostname !== url.hostname) {
+                return new Response(JSON.stringify({ error: 'Invalid Origin' }), { status: 403, headers: jsonHeader });
+            }
         }
         
         // GET /admin/api/users - List all users
@@ -598,14 +574,15 @@ async function handleAdminRequest(request, env) {
              try {
                 const { uuid, exp_date: expDate, exp_time: expTime, notes } = await request.json();
 
+                // Corrected and clarified validation logic
                 if (!uuid || !expDate || !expTime || !/^\d{4}-\d{2}-\d{2}$/.test(expDate) || !/^\d{2}:\d{2}:\d{2}$/.test(expTime)) {
                     throw new Error('Invalid or missing fields. Use UUID, YYYY-MM-DD, and HH:MM:SS.');
                 }
-                
+                 
                 await env.DB.prepare("INSERT INTO users (uuid, expiration_date, expiration_time, notes) VALUES (?, ?, ?, ?)")
                     .bind(uuid, expDate, expTime, notes || null).run();
                 await env.USER_KV.put(`user:${uuid}`, JSON.stringify({ exp_date: expDate, exp_time: expTime }));
-                
+                 
                 return new Response(JSON.stringify({ success: true, uuid }), { status: 201, headers: jsonHeader });
             } catch (error) {
                  if (error.message?.includes('UNIQUE constraint failed')) {
@@ -614,7 +591,7 @@ async function handleAdminRequest(request, env) {
                  return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
             }
         }
-        
+         
         // POST /admin/api/users/bulk-delete - Efficiently delete multiple users
         if (pathname === '/admin/api/users/bulk-delete' && request.method === 'POST') {
             try {
@@ -622,43 +599,45 @@ async function handleAdminRequest(request, env) {
                 if (!Array.isArray(uuids) || uuids.length === 0) {
                     throw new Error('Invalid request body: Expected an array of UUIDs.');
                 }
-                
+                 
                 const deleteUserStmt = env.DB.prepare("DELETE FROM users WHERE uuid = ?");
                 const stmts = uuids.map(uuid => deleteUserStmt.bind(uuid));
                 await env.DB.batch(stmts);
 
                 // Delete from KV in parallel for speed
                 await Promise.all(uuids.map(uuid => env.USER_KV.delete(`user:${uuid}`)));
-                
+                 
                 return new Response(JSON.stringify({ success: true, count: uuids.length }), { status: 200, headers: jsonHeader });
             } catch (error) {
                 return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
             }
         }
 
+        // Matcher for single-user routes
+        const userRouteMatch = pathname.match(/^\/admin\/api\/users\/([a-f0-9-]+)$/);
+
         // PUT /admin/api/users/:uuid - Update a single user
-        const updateMatch = pathname.match(/^\/admin\/api\/users\/([a-f0-9-]+)$/);
-        if (updateMatch && request.method === 'PUT') {
-            const uuid = updateMatch[1];
+        if (userRouteMatch && request.method === 'PUT') {
+            const uuid = userRouteMatch[1];
             try {
                 const { exp_date: expDate, exp_time: expTime, notes } = await request.json();
                 if (!expDate || !expTime || !/^\d{4}-\d{2}-\d{2}$/.test(expDate) || !/^\d{2}:\d{2}:\d{2}$/.test(expTime)) {
                     throw new Error('Invalid date/time fields. Use YYYY-MM-DD and HH:MM:SS.');
                 }
-                
+                 
                 await env.DB.prepare("UPDATE users SET expiration_date = ?, expiration_time = ?, notes = ? WHERE uuid = ?")
                     .bind(expDate, expTime, notes || null, uuid).run();
                 await env.USER_KV.put(`user:${uuid}`, JSON.stringify({ exp_date: expDate, exp_time: expTime }));
-                
+                 
                 return new Response(JSON.stringify({ success: true, uuid }), { status: 200, headers: jsonHeader });
             } catch (error) {
                 return new Response(JSON.stringify({ error: error.message }), { status: 400, headers: jsonHeader });
             }
         }
-        
+         
         // DELETE /admin/api/users/:uuid - Delete a single user
-        if (updateMatch && request.method === 'DELETE') {
-            const uuid = updateMatch[1];
+        if (userRouteMatch && request.method === 'DELETE') {
+            const uuid = userRouteMatch[1];
              try {
                 await env.DB.prepare("DELETE FROM users WHERE uuid = ?").bind(uuid).run();
                 await env.USER_KV.delete(`user:${uuid}`);
@@ -667,7 +646,7 @@ async function handleAdminRequest(request, env) {
                 return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: jsonHeader });
             }
         }
-        
+         
         return new Response(JSON.stringify({ error: 'API route not found' }), { status: 404, headers: jsonHeader });
     }
 
@@ -687,11 +666,11 @@ async function handleAdminRequest(request, env) {
                 return new Response(loginPageWithError, { status: 401, headers: { 'Content-Type': 'text/html;charset=utf-8' } });
             }
         }
-        
+         
         if (request.method === 'GET') {
             return new Response(await isAdmin(request, env) ? adminPanelHTML : adminLoginHTML, { headers: { 'Content-Type': 'text/html;charset=utf-8' } });
         }
-        
+         
         return new Response('Method Not Allowed', { status: 405 });
     }
 
@@ -831,7 +810,7 @@ async function handleIpSubscription(core, userID, hostName) {
     const r = await fetch('https://raw.githubusercontent.com/NiREvil/vless/refs/heads/main/Cloudflare-IPs.json');
     if (r.ok) {
       const json = await r.json();
-      const ips = [...(json.ipv4 || []), ...(json.ipv6 || [])].slice(0, 20).map(x => x.ip);
+      const ips = [...(json.ipv4 ?? []), ...(json.ipv6 ?? [])].slice(0, 20).map(x => x.ip);
       ips.forEach((ip, i) => {
         const formattedAddress = ip.includes(':') ? `[${ip}]` : ip;
         links.push(
@@ -857,7 +836,6 @@ export default {
     const cfg = Config.fromEnv(env);
     const url = new URL(request.url);
 
-    // --- Admin Panel Route ---
     if (url.pathname.startsWith('/admin')) {
       return handleAdminRequest(request, env);
     }
@@ -873,13 +851,13 @@ export default {
         enableSocks: cfg.socks5.enabled,
         parsedSocks5Address: cfg.socks5.enabled ? socks5AddressParser(cfg.socks5.address) : {},
       };
-
       return await ProtocolOverWSHandler(request, requestConfig, env);
     }
 
-    if (url.pathname === '/scamalytics-lookup') return handleScamalyticsLookup(request, cfg);
+    if (url.pathname === '/scamalytics-lookup') {
+        return handleScamalyticsLookup(request, cfg);
+    }
 
-    // Per-user subscription routes
     const handleSubscription = async (core) => {
       const uuid = url.pathname.slice(`/${core}/`.length);
       if (!isValidUUID(uuid)) return new Response('Invalid UUID', { status: 400 });
@@ -898,7 +876,6 @@ export default {
       return handleSubscription('sb');
     }
 
-    // Per-user config page (user panel)
     const path = url.pathname.slice(1);
     if (isValidUUID(path)) {
       const userData = await getUserData(env, path);
@@ -907,37 +884,25 @@ export default {
       }
       return handleConfigPage(path, url.hostname, cfg.proxyAddress, userData.exp_date, userData.exp_time);
     }
-    
-    // START: ==================== NEW REVERSE PROXY LOGIC ====================
-    // If an environment variable named ROOT_PROXY_URL is set,
-    // this worker will act as a reverse proxy for all unhandled routes.
+     
     if (env.ROOT_PROXY_URL) {
       try {
         const proxyUrl = new URL(env.ROOT_PROXY_URL);
         const targetUrl = new URL(request.url);
 
-        // Set the destination host, protocol, and port from the proxy URL
         targetUrl.hostname = proxyUrl.hostname;
         targetUrl.protocol = proxyUrl.protocol;
         targetUrl.port = proxyUrl.port;
-        
-        // Create a new request to the target server, preserving the method, headers, and body of the original request
+         
         const newRequest = new Request(targetUrl, request);
-        
-        // Set the 'Host' header to match the target server, which is crucial for many web servers
+         
         newRequest.headers.set('Host', proxyUrl.hostname);
-
-        // Send the real user IP
         newRequest.headers.set('X-Forwarded-For', request.headers.get('CF-Connecting-IP'));
-        newRequest.headers.set('X-Forwarded-Proto', 'https'); // Assume the worker is always accessed via HTTPS
-        
-        // Receive the response from the target server
+        newRequest.headers.set('X-Forwarded-Proto', 'https');
+         
         const response = await fetch(newRequest);
-        
-        // Create a new response with mutable headers to send to the user
+         
         const mutableHeaders = new Headers(response.headers);
-
-        // Remove headers that might cause security issues or conflicts
         mutableHeaders.delete('Content-Security-Policy');
         mutableHeaders.delete('Content-Security-Policy-Report-Only');
         mutableHeaders.delete('X-Frame-Options');
@@ -949,18 +914,14 @@ export default {
         });
 
       } catch (e) {
-        // If ROOT_PROXY_URL is invalid or the fetch fails, an error is returned
         console.error(`Reverse Proxy Error: ${e.message}`);
         return new Response(`Proxy configuration error or upstream server is down. Please check the ROOT_PROXY_URL variable. Error: ${e.message}`, { status: 502 });
       }
     }
-    // END: ==================== NEW REVERSE PROXY LOGIC ====================
-
 
     return new Response('Not found', { status: 404 });
   },
 };
-
 
 async function ProtocolOverWSHandler(request, config, env) {
   const webSocketPair = new WebSocketPair();
@@ -1004,7 +965,7 @@ async function ProtocolOverWSHandler(request, config, env) {
           } = await ProcessProtocolHeader(chunk, env);
 
           address = addressRemote;
-          portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'} `;
+          portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? 'udp' : 'tcp'}` ;
 
           if (hasError) {
             controller.error(message);
@@ -1038,10 +999,10 @@ async function ProtocolOverWSHandler(request, config, env) {
           );
         },
         close() {
-          log(`readableWebSocketStream closed`);
+          log('readableWebSocketStream closed');
         },
         abort(err) {
-          log(`readableWebSocketStream aborted`, err);
+          log('readableWebSocketStream aborted', err);
         },
       }),
     )
@@ -1201,16 +1162,16 @@ async function RemoteSocketToWS(remoteSocket, webSocket, protocolResponseHeader,
           log(`Remote connection readable closed. Had incoming data: ${hasIncomingData}`);
         },
         abort(reason) {
-          console.error(`Remote connection readable aborted:`, reason);
+          console.error('Remote connection readable aborted:', reason);
         },
       }),
     );
   } catch (error) {
-    console.error(`RemoteSocketToWS error:`, error.stack || error);
+    console.error('RemoteSocketToWS error:', error.stack || error);
     safeCloseWebSocket(webSocket);
   }
   if (!hasIncomingData && retry) {
-    log(`No incoming data, retrying`);
+    log('No incoming data, retrying');
     retry();
   }
 }
@@ -1295,7 +1256,7 @@ async function createDnsPipeline(webSocket, vlessResponseHeader, log) {
       new WritableStream({
         async write(chunk) {
           try {
-            const resp = await fetch(`https://1.1.1.1/dns-query`, {
+            const resp = await fetch('https://1.1.1.1/dns-query', {
               method: 'POST',
               headers: { 'content-type': 'application/dns-message' },
               body: chunk,
@@ -1455,8 +1416,6 @@ function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
   return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// ############# NEW AND CORRECTED SECTION #############
-
 function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
   const dream = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
@@ -1468,45 +1427,27 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
     address: hostName, port: 443, tag: `${hostName}-Singbox`,
   });
   
-  const configs = { dream, freedom };
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
   const subSbUrl   = `https://${hostName}/sb/${userID}`;
-
-  // --- START: PROFESSIONAL FIX FOR DIRECT IMPORT ---
-  // A base64 data URI is created containing the single VLESS configuration.
-  // This method is more reliable for clients that might have issues fetching subscription URLs from deep links.
-  // The "content" of this subscription is simply the single config string itself, encoded in base64.
-  const directImportXrayContent = btoa(configs.dream);
-  const directImportXrayDataUri = `data:text/plain;base64,${directImportXrayContent}`;
-  // --- END: PROFESSIONAL FIX ---
+  
+  const configs = { dream, freedom };
   
   const clientUrls = {
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
-    
-    // --- MODIFIED LINES FOR NPV TUNNEL & KARING ---
-    // The links now use the direct base64 data URI for flawless one-click import.
-    npvTunnel: `npvtunnel://install-config?url=${encodeURIComponent(directImportXrayDataUri)}`,
-    karing: `karing://install-config?url=${encodeURIComponent(directImportXrayDataUri)}`,
-    // --- END OF MODIFIED LINES ---
-
-    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`, // Kept as a subscription link, as it's standard for V2RayNG.
+    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
     exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
   };
-  
-  // START: *** PROFESSIONAL TIMEZONE ENHANCEMENT ***
+
   let expirationBlock = '';
   if (expDate && expTime) {
       const utcTimestamp = `${expDate}T${expTime.split('.')[0]}Z`;
-      expirationBlock = `<p id="expiration-display" data-utc-time="${utcTimestamp}">
-          Loading expiration time...
-      </p>`;
+      expirationBlock = `<p id="expiration-display" data-utc-time="${utcTimestamp}">Loading expiration time...</p>`;
   } else {
-      expirationBlock = '<p>No expiration date set.</p>';
+      expirationBlock = '<p id="expiration-display">No expiration date set.</p>';
   }
-  // END: *** PROFESSIONAL TIMEZONE ENHANCEMENT ***
 
-  let finalHTML = `
-  <!doctype html>
+  const finalHTML = `<!doctype html>
   <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -1516,6 +1457,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300..700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>${getPageCSS()}</style> 
   </head>
   <body data-proxy-ip="${proxyAddress}">
@@ -1538,20 +1480,20 @@ function getPageCSS() {
         box-sizing: border-box;
       }
       @font-face {
-	      font-family: "Aldine 401 BT Web";
-	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
-	      font-weight: 400; font-style: normal; font-display: swap;
-	    }
-	    @font-face {
-	      font-family: "Styrene B LC";
-	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
-	      font-weight: 400; font-style: normal; font-display: swap;
-	    }
-	    @font-face {
-	      font-family: "Styrene B LC";
-	      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
-	      font-weight: 500; font-style: normal; font-display: swap;
-	    }
+      font-family: "Aldine 401 BT Web";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "Styrene B LC";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "Styrene B LC";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
+      font-weight: 500; font-style: normal; font-display: swap;
+    }
       :root {
         --background-primary: #2a2421; --background-secondary: #35302c; --background-tertiary: #413b35;
         --border-color: #5a4f45; --border-color-hover: #766a5f; --text-primary: #e5dfd6; --text-secondary: #b3a89d;
@@ -1561,9 +1503,9 @@ function getPageCSS() {
         --border-radius: 8px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
         --status-success: #70b570; --status-error: #e05d44; --status-warning: #e0bc44; --status-info: #4f90c4;
         --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
-	      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
-	      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
-	    }
+      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
+      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
+    }
       body {
         font-family: var(--sans-serif); font-size: 16px; font-weight: 400; font-style: normal;
         background-color: var(--background-primary); color: var(--text-primary);
@@ -1668,74 +1610,74 @@ function getPageCSS() {
       .client-btn:hover .client-icon { transform: rotate(15deg) scale(1.1); }
       .client-btn .button-text { position: relative; z-index: 2; transition: letter-spacing 0.3s ease; }
       .client-btn:hover .button-text { letter-spacing: 0.5px; }
-	    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-	    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
-	    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
-	    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
-	    .footer { text-align: center; margin-top: 20px; padding-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
-	    .footer p { margin-bottom: 0px; }
-	    ::-webkit-scrollbar { width: 8px; height: 8px; }
-	    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
-	    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
-	    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
-	    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
-	    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
-	    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
-	    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-	    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
-	    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
-	    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
-	    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
-	    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
-	    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
-	    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-	    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
-	    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
-	    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
-	    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
-	    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
-	    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-	    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
-	    @media (max-width: 768px) {
-	      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
-	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
-	      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
-	      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
-	      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
-	      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
-	      .config-card { padding: 16px; } .config-title { font-size: 18px; }
-	      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
-	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
-	      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
-	    }
-	    @media (max-width: 480px) {
-	      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
-	      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
-	      .ip-info-section { padding: 14px; gap: 16px; }
-	      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-	      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
-	      .ip-info-header svg { width: 18px; height: 18px; } .ip-info-item .label { font-size: 9px; }
-	      .ip-info-item .value { font-size: 11px; } .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
-	      .config-card { padding: 10px; } .config-title { font-size: 16px; }
-	      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
-	      .config-content pre { font-size: 10px; }
-	      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
-	      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; } .footer { font-size: 10px; }
-	      }
-	    @media (max-width: 359px) {
+    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
+    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
+    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
+    .footer { text-align: center; margin-top: 20px; margin-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
+    .footer p { margin-bottom: 0px; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
+    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
+    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
+    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
+    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
+    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
+    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
+    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
+    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
+    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
+    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
+    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
+    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
+    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+    @media (max-width: 768px) {
+      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
+      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
+      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
+      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
+      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
+      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
+      .config-card { padding: 16px; } .config-title { font-size: 18px; }
+      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
+    }
+    @media (max-width: 480px) {
+      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
+      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
+      .ip-info-section { padding: 14px; gap: 16px; }
+      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
+      .ip-info-header svg { width: 18px; height: 18px; } .ip-info-item .label { font-size: 9px; }
+      .ip-info-item .value { font-size: 11px; } .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
+      .config-card { padding: 10px; } .config-title { font-size: 16px; }
+      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
+      .config-content pre { font-size: 10px; }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; } .footer { font-size: 10px; }
+      }
+    @media (max-width: 359px) {
           body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
           .header h1 { font-size: 16px; } .header p { font-size: 6px; }
           .ip-info-section { padding: 12px; gap: 12px; }
           .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
           .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
           .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
-		  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
+  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
           .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
           .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
-		  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
           .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
         }
-    
+     
         @media (min-width: 360px) { .container { max-width: 95%; } }
         @media (min-width: 480px) { .container { max-width: 90%; } }
         @media (min-width: 640px) { .container { max-width: 600px; } }
@@ -1798,16 +1740,18 @@ function getPageHTML(configs, clientUrls) {
       <div class="config-card">
         <div class="config-title">
           <span>Xray Core Clients</span>
-          <button class="button copy-buttons" onclick="copyToClipboard(this, '${configs.dream}')">
+          <button id="copy-xray-btn" class="button copy-buttons">
             <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             Copy
           </button>
         </div>
         <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
+        <button class="button" onclick="toggleQR('xray')">Show QR Code</button>
+        <div id="qr-xray-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-xray"></div></div>
         <div class="client-buttons">
-          <a href="${clientUrls.npvTunnel}" class="button client-btn">
+          <a href="${configs.dream}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to Npv Tunnel</span>
+            <span class="button-text">Import All Clients</span>
           </a>
           <a href="${clientUrls.karing}" class="button client-btn">
              <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
@@ -1823,12 +1767,14 @@ function getPageHTML(configs, clientUrls) {
       <div class="config-card">
         <div class="config-title">
           <span>Sing-Box Core Clients</span>
-          <button class="button copy-buttons" onclick="copyToClipboard(this, '${configs.freedom}')">
+          <button id="copy-singbox-btn" class="button copy-buttons">
             <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
             Copy
           </button>
         </div>
         <div class="config-content"><pre id="singbox-config">${configs.freedom}</pre></div>
+        <button class="button" onclick="toggleQR('singbox')">Show QR Code</button>
+        <div id="qr-singbox-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-singbox"></div></div>
         <div class="client-buttons">
           <a href="${clientUrls.clashMeta}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
@@ -1836,7 +1782,7 @@ function getPageHTML(configs, clientUrls) {
           </a>
           <a href="${clientUrls.exclave}" class="button client-btn">
             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
-            <span class="button-text">Import to Exclavex</span>
+            <span class="button-text">Import to Exclave</span>
           </a>
         </div>
       </div>
@@ -1865,6 +1811,25 @@ function getPageScript() {
         }).catch(err => {
           console.error("Failed to copy text: ", err);
         });
+      }
+
+      function toggleQR(id) {
+        var container = document.getElementById('qr-' + id + '-container');
+        if (container.style.display === 'none' || container.style.display === '') {
+          container.style.display = 'block';
+          if (!container.querySelector('#qr-' + id).hasChildNodes()) {
+            new QRCode(document.getElementById('qr-' + id), {
+              text: document.getElementById(id + '-config').textContent,
+              width: 256,
+              height: 256,
+              colorDark: "#000000",
+              colorLight: "#ffffff",
+              correctLevel: QRCode.CorrectLevel.H
+            });
+          }
+        } else {
+          container.style.display = 'none';
+        }
       }
 
       async function fetchClientPublicIP() {
@@ -1899,7 +1864,7 @@ function getPageScript() {
 
       function updateScamalyticsClientDisplay(data) {
         const prefix = 'client';
-        if (!data || !data.scamalytics || data.scamalytics.status !== 'ok') {
+        if (!data  || !data.scamalytics  || data.scamalytics.status !== 'ok') {
           showError(prefix, (data && data.scamalytics && data.scamalytics.error) || 'Could not load client data from Scamalytics');
           return;
         }
@@ -1920,7 +1885,7 @@ function getPageScript() {
           if (flagElementHtml || textPart) locationString = \`\${flagElementHtml}\${textPart}\`.trim();
           elements.location.innerHTML = locationString || "N/A";
         }
-        if (elements.isp) elements.isp.textContent = sa.scamalytics_isp || dbip?.isp_name || "N/A";
+        if (elements.isp) elements.isp.textContent = sa.scamalytics_isp  || dbip?.isp_name  || "N/A";
         if (elements.proxy) {
           const score = sa.scamalytics_score;
           const risk = sa.scamalytics_risk;
@@ -1958,7 +1923,7 @@ function getPageScript() {
           let textPart = [city, countryName].filter(Boolean).join(', ');
           elements.location.innerHTML = (flagElementHtml || textPart) ? \`\${flagElementHtml}\${textPart}\`.trim() : "N/A";
         }
-        if (elements.isp) elements.isp.textContent = geo.isp || geo.organisation || geo.as_name || geo.as || 'N/A';
+        if (elements.isp) elements.isp.textContent = geo.isp  || geo.organisation  || geo.as_name  || geo.as  || 'N/A';
       }
 
       async function fetchIpApiIoInfo(ip) {
@@ -1977,7 +1942,7 @@ function getPageScript() {
         const elements = (prefix === 'proxy') 
           ? ['host', 'ip', 'location', 'isp']
           : ['ip', 'location', 'isp', 'proxy'];
-        
+         
         elements.forEach(key => {
           const el = document.getElementById(\`\${prefix}-\${key}\`);
           if (!el) return;
@@ -1997,7 +1962,7 @@ function getPageScript() {
 
           if (proxyDomainOrIp && proxyDomainOrIp !== "N/A") {
             let resolvedProxyIp = proxyDomainOrIp;
-            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp)) {
+            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp) && !/^[0-9a-fA-F:]+$/.test(proxyDomainOrIp)) {
               try {
                 const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
                 if (dnsRes.ok) {
@@ -2041,7 +2006,7 @@ function getPageScript() {
             expElement.textContent = 'Invalid expiration time format.';
             return;
         }
-        
+         
         const commonOptions = {
             year: 'numeric', month: 'long', day: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -2059,36 +2024,53 @@ function getPageScript() {
         \`;
       }
 
-      document.getElementById('refresh-ip-info')?.addEventListener('click', function() {
-        const button = this;
-        const icon = button.querySelector('.refresh-icon');
-        button.disabled = true;
-        if (icon) icon.style.animation = 'spin 1s linear infinite';
+      document.addEventListener('DOMContentLoaded', () => {
+        loadNetworkInfo();
+        displayExpirationTimes();
 
-        const resetToSkeleton = (prefix) => {
-          const elementsToReset = ['ip', 'location', 'isp'];
-          if (prefix === 'proxy') elementsToReset.push('host');
-          if (prefix === 'client') elementsToReset.push('proxy');
-          elementsToReset.forEach(key => {
-            const element = document.getElementById(\`\${prefix}-\${key}\`);
-            if (element) element.innerHTML = \`<span class="skeleton" style="width: 120px;"></span>\`;
-          });
-        };
+        // Attach event listeners for copy buttons
+        const copyXrayBtn = document.getElementById('copy-xray-btn');
+        if (copyXrayBtn) {
+            copyXrayBtn.addEventListener('click', function() {
+                const textToCopy = document.getElementById('xray-config').textContent;
+                copyToClipboard(this, textToCopy);
+            });
+        }
 
-        resetToSkeleton('proxy');
-        resetToSkeleton('client');
-        loadNetworkInfo().finally(() => setTimeout(() => {
-          button.disabled = false; if (icon) icon.style.animation = '';
-        }, 1000));
+        const copySingboxBtn = document.getElementById('copy-singbox-btn');
+        if (copySingboxBtn) {
+            copySingboxBtn.addEventListener('click', function() {
+                const textToCopy = document.getElementById('singbox-config').textContent;
+                copyToClipboard(this, textToCopy);
+            });
+        }
+        
+        document.getElementById('refresh-ip-info')?.addEventListener('click', function() {
+            const button = this;
+            const icon = button.querySelector('.refresh-icon');
+            button.disabled = true;
+            if (icon) icon.style.animation = 'spin 1s linear infinite';
+    
+            const resetToSkeleton = (prefix) => {
+              const elementsToReset = ['ip', 'location', 'isp'];
+              if (prefix === 'proxy') elementsToReset.push('host');
+              if (prefix === 'client') elementsToReset.push('proxy');
+              elementsToReset.forEach(key => {
+                const element = document.getElementById(\`\${prefix}-\${key}\`);
+                if (element) element.innerHTML = \`<span class="skeleton" style="width: 120px;"></span>\`;
+              });
+            };
+    
+            resetToSkeleton('proxy');
+            resetToSkeleton('client');
+            loadNetworkInfo().finally(() => setTimeout(() => {
+              button.disabled = false; if (icon) icon.style.animation = '';
+            }, 1000));
+        });
       });
 
       const style = document.createElement('style');
       style.textContent = \`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\`;
       document.head.appendChild(style);
-
-      document.addEventListener('DOMContentLoaded', () => {
-        loadNetworkInfo();
-        displayExpirationTimes(); // Call the new function to display times
-      });
   `;
 }
