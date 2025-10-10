@@ -1412,38 +1412,35 @@ async function handleScamalyticsLookup(request, config) {
 }
 
 function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
-  const dream = buildLink({
+  const html = generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate, expTime);
+  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
+  // Single configs for QR code and manual copy
+  const singleXrayConfig = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Xray`,
   });
 
-  const freedom = buildLink({
-    core: 'sb',   proto: 'tls', userID, hostName,
+  const singleSingboxConfig = buildLink({
+    core: 'sb', proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Singbox`,
   });
   
+  // Subscription URLs
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
-  const subSbUrl   = `https://${hostName}/sb/${userID}`;
+  const subSbUrl = `https://${hostName}/sb/${userID}`;
   
-  const configs = { dream, freedom };
-  
+  // Deep-links for one-click import
   const clientUrls = {
+    // Universal Android link - many clients recognize this
+    universalAndroid: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    // iOS specific links
+    shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
+    stash: `stash://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    // Clash link using a converter
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
-    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
-    hiddify: `hiddify://import/?url=${encodeURIComponent(subXrayUrl)}`,
-    nekobox: `nekobox://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    mahsa: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    nika: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    oneshield: `oneshield://import-config?url=${encodeURIComponent(subXrayUrl)}`,
-    maxray: `maxray://import-config?url=${encodeURIComponent(subXrayUrl)}`,
-    teta: `teta://import-config?url=${encodeURIComponent(subXrayUrl)}`,
-    ford: `ford://import-config?url=${encodeURIComponent(subXrayUrl)}`,
-    // For iOS additional
-    foxray: `foxray://import?url=${encodeURIComponent(subXrayUrl)}`,
-    v2box: `v2box://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    streisand: `streisand://import?url=${encodeURIComponent(subXrayUrl)}`,
   };
 
   let expirationBlock = '';
@@ -1468,7 +1465,7 @@ function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
     <style>${getPageCSS()}</style> 
   </head>
   <body data-proxy-ip="${proxyAddress}">
-    ${getPageHTML(configs, clientUrls).replace(
+    ${getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayUrl, subSbUrl).replace(
         '<p>Copy the configuration or import directly into your client</p>', 
         `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
     )}
@@ -1476,7 +1473,7 @@ function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
   </body>
   </html>`;
 
-  return new Response(finalHTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  return finalHTML;
 }
 
 function getPageCSS() {
@@ -1595,7 +1592,9 @@ function getPageCSS() {
       }
       .copy-buttons:active { transform: translateY(0px) scale(0.98); box-shadow: none; }
       .copy-icon { width: 12px; height: 12px; stroke: currentColor; }
-      .client-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; }
+      .client-buttons-container { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+      .client-buttons-container h3 { font-family: var(--serif); font-size: 14px; color: var(--text-secondary); margin: 8px 0 -8px 0; font-weight: 400; text-align: center; }
+      .client-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
       .client-btn {
         width: 100%; background-color: var(--accent-primary); color: var(--background-tertiary);
         border-radius: 6px; border-color: var(--accent-primary-darker); position: relative; overflow: hidden;
@@ -1654,7 +1653,7 @@ function getPageCSS() {
       .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
       .config-card { padding: 16px; } .config-title { font-size: 18px; }
       .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
-      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
       .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
     }
     @media (max-width: 480px) {
@@ -1668,7 +1667,7 @@ function getPageCSS() {
       .config-card { padding: 10px; } .config-title { font-size: 16px; }
       .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
       .config-content pre { font-size: 10px; }
-      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(100%, 1fr)); }
       .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; } .footer { font-size: 10px; }
       }
     @media (max-width: 359px) {
@@ -1693,7 +1692,7 @@ function getPageCSS() {
   `;
 }
 
-function getPageHTML(configs, clientUrls) {
+function getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayUrl, subSbUrl) {
   return `
     <div class="container">
       <div class="header">
@@ -1746,95 +1745,68 @@ function getPageHTML(configs, clientUrls) {
 
       <div class="config-card">
         <div class="config-title">
-          <span>Xray Core Clients</span>
-          <button id="copy-xray-btn" class="button copy-buttons">
-            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            Copy
+          <span>Xray Subscription</span>
+          <button id="copy-xray-sub-btn" class="button copy-buttons" data-clipboard-text="${subXrayUrl}">
+             <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+             Copy Link
           </button>
         </div>
-        <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
-        <button class="button" onclick="toggleQR('xray')">Show QR Code</button>
-        <div id="qr-xray-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-xray"></div></div>
-        <div class="client-buttons">
-          <a href="${configs.dream}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import Single Config</span>
-          </a>
-          <a href="${clientUrls.karing}" class="button client-btn">
-             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-             <span class="button-text">Import to Karing (All)</span>
-          </a>
-          <a href="${clientUrls.v2rayng}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to V2rayNG (All)</span>
-          </a>
-          <a href="${clientUrls.hiddify}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to HiddifyNG (All)</span>
-          </a>
-          <a href="${clientUrls.nekobox}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to Nekobox (All)</span>
-          </a>
-          <a href="${clientUrls.mahsa}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to MahsaNG (All)</span>
-          </a>
-          <a href="${clientUrls.nika}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to NikaNG (All)</span>
-          </a>
-          <a href="${clientUrls.oneshield}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to One Shield VIP (All)</span>
-          </a>
-          <a href="${clientUrls.maxray}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to MaxRay Free VPN (All)</span>
-          </a>
-          <a href="${clientUrls.teta}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to TETA VPN (All)</span>
-          </a>
-          <a href="${clientUrls.ford}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to Ford VPN (All)</span>
-          </a>
-          <a href="${clientUrls.foxray}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to FoXray (iOS, All)</span>
-          </a>
-          <a href="${clientUrls.v2box}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to V2Box (iOS, All)</span>
-          </a>
-          <a href="${clientUrls.streisand}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
-            <span class="button-text">Import to Streisand (iOS, All)</span>
-          </a>
+        <div class="config-content" style="display:none;"><pre id="xray-config">${singleXrayConfig}</pre></div>
+        <div class="client-buttons-container">
+            <h3>Android</h3>
+            <div class="client-buttons">
+                <a href="${clientUrls.universalAndroid}" class="button client-btn">
+                    <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4.3,17.4 L19.7,17.4 L19.7,6.6 L4.3,6.6 L4.3,17.4 Z M3,4 L21,4 C22.1,4 23,4.9 23,6 L23,18 C23,19.1 22.1,20 21,20 L3,20 C1.9,20 1,19.1 1,18 L1,6 C1,4.9 1.9,4 3,4 L3,4 Z"/></svg></span>
+                    <span class="button-text">Universal Import (V2rayNG, etc.)</span>
+                </a>
+            </div>
+            <h3>iOS</h3>
+            <div class="client-buttons">
+                <a href="${clientUrls.shadowrocket}" class="button client-btn">
+                    <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12,2 C6.48,2 2,6.48 2,12 C2,17.52 6.48,22 12,22 C17.52,22 22,17.52 22,12 C22,6.48 17.52,2 12,2 Z M16.29,15.71 L12,11.41 L7.71,15.71 L6.29,14.29 L10.59,10 L6.29,5.71 L7.71,4.29 L12,8.59 L16.29,4.29 L17.71,5.71 L13.41,10 L17.71,14.29 L16.29,15.71 Z"/></svg></span>
+                    <span class="button-text">Import to Shadowrocket</span>
+                </a>
+                <a href="${clientUrls.stash}" class="button client-btn">
+                    <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12,2 L2,7 L12,12 L22,7 L12,2 Z M2,17 L12,22 L22,17 L12,12 L2,17 Z M2,12 L12,17 L22,12 L12,7 L2,12 Z"/></svg></span>
+                    <span class="button-text">Import to Stash</span>
+                </a>
+            </div>
+            <h3>Desktop / Other</h3>
+            <div class="client-buttons">
+              <button class="button client-btn" onclick="toggleQR('xray')">
+                <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm0 10h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6zm-4-3h2v2h-2zm0-4h2v2h-2zm-4 0h2v2H6zm-2-2h2v2H4zm12 0h2v2h-2zM9 6h2v2H9zm4 0h2v2h-2zm2 5h2v2h-2zM9 13h2v2H9zm-2 2h2v2H7zm-2-2h2v2H5z"/></svg></span>
+                <span class="button-text">Show QR Code</span>
+              </button>
+            </div>
+            <div id="qr-xray-container" style="display:none; text-align:center; margin-top: 10px; background: white; padding: 10px; border-radius: 8px; max-width: 276px; margin-left: auto; margin-right: auto;"><div id="qr-xray"></div></div>
         </div>
       </div>
 
       <div class="config-card">
         <div class="config-title">
-          <span>Sing-Box Core Clients</span>
-          <button id="copy-singbox-btn" class="button copy-buttons">
+          <span>Sing-Box / Clash Subscription</span>
+          <button id="copy-sb-sub-btn" class="button copy-buttons" data-clipboard-text="${subSbUrl}">
             <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-            Copy
+            Copy Link
           </button>
         </div>
-        <div class="config-content"><pre id="singbox-config">${configs.freedom}</pre></div>
-        <button class="button" onclick="toggleQR('singbox')">Show QR Code</button>
-        <div id="qr-singbox-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-singbox"></div></div>
-        <div class="client-buttons">
-          <a href="${clientUrls.clashMeta}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
-            <span class="button-text">Import to Clash Meta</span>
-          </a>
-          <a href="${clientUrls.exclave}" class="button client-btn">
-            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
-            <span class="button-text">Import to Exclave</span>
-          </a>
+        <div class="config-content" style="display:none;"><pre id="singbox-config">${singleSingboxConfig}</pre></div>
+        <div class="client-buttons-container">
+            <h3>Android / Windows / macOS</h3>
+            <div class="client-buttons">
+                <a href="${clientUrls.clashMeta}" class="button client-btn">
+                  <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
+                  <span class="button-text">Import to Clash Meta / Stash</span>
+                </a>
+            </div>
+            <h3>Desktop / Other</h3>
+             <div class="client-buttons">
+              <button class="button client-btn" onclick="toggleQR('singbox')">
+                <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm0 10h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6zm-4-3h2v2h-2zm0-4h2v2h-2zm-4 0h2v2H6zm-2-2h2v2H4zm12 0h2v2h-2zM9 6h2v2H9zm4 0h2v2h-2zm2 5h2v2h-2zM9 13h2v2H9zm-2 2h2v2H7zm-2-2h2v2H5z"/></svg></span>
+                <span class="button-text">Show QR Code</span>
+              </button>
+            </div>
+            <div id="qr-singbox-container" style="display:none; text-align:center; margin-top: 10px; background: white; padding: 10px; border-radius: 8px; max-width: 276px; margin-left: auto; margin-right: auto;"><div id="qr-singbox"></div></div>
         </div>
       </div>
 
@@ -1851,7 +1823,7 @@ function getPageScript() {
       function copyToClipboard(button, text) {
         const originalHTML = button.innerHTML;
         navigator.clipboard.writeText(text).then(() => {
-          button.innerHTML = \`<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copied!\`;
+          button.innerHTML = \`<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg> Copied!\`;
           button.classList.add("copied");
           button.disabled = true;
           setTimeout(() => {
@@ -1873,8 +1845,8 @@ function getPageScript() {
               text: document.getElementById(id + '-config').textContent,
               width: 256,
               height: 256,
-              colorDark: "#000000",
-              colorLight: "#ffffff",
+              colorDark: "#2a2421",
+              colorLight: "#e5dfd6",
               correctLevel: QRCode.CorrectLevel.H
             });
           }
@@ -2079,22 +2051,15 @@ function getPageScript() {
         loadNetworkInfo();
         displayExpirationTimes();
 
-        // Attach event listeners for copy buttons
-        const copyXrayBtn = document.getElementById('copy-xray-btn');
-        if (copyXrayBtn) {
-            copyXrayBtn.addEventListener('click', function() {
-                const textToCopy = document.getElementById('xray-config').textContent;
-                copyToClipboard(this, textToCopy);
-            });
-        }
-
-        const copySingboxBtn = document.getElementById('copy-singbox-btn');
-        if (copySingboxBtn) {
-            copySingboxBtn.addEventListener('click', function() {
-                const textToCopy = document.getElementById('singbox-config').textContent;
-                copyToClipboard(this, textToCopy);
-            });
-        }
+        document.querySelectorAll('.copy-buttons').forEach(button => {
+          button.addEventListener('click', function(e) {
+            e.preventDefault();
+            const textToCopy = this.getAttribute('data-clipboard-text');
+            if (textToCopy) {
+              copyToClipboard(this, textToCopy);
+            }
+          });
+        });
         
         document.getElementById('refresh-ip-info')?.addEventListener('click', function() {
             const button = this;
