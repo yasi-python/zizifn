@@ -1441,6 +1441,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
     // iOS specific links
     shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
     stash: `stash://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    streisand: `streisand://import/${btoa(subXrayUrl)}`,
     // Clash link using a converter
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
   };
@@ -1775,6 +1776,10 @@ function getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayU
                 <a href="${clientUrls.stash}" class="button client-btn">
                     <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12,2 L2,7 L12,12 L22,7 L12,2 Z M2,17 L12,22 L22,17 L12,12 L2,17 Z M2,12 L12,17 L22,12 L12,7 L2,12 Z"/></svg></span>
                     <span class="button-text">Import to Stash</span>
+                </a>
+                <a href="${clientUrls.streisand}" class="button client-btn">
+                    <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M19,3 H5 C3.9,3 3,3.9 3,5 v14 c0,1.1 0.9,2 2,2 h14 c1.1,0 2-0.9 2-2 V5 C21,3.9 20.1,3 19,3 Z M12,11.5 c-0.83,0 -1.5,-0.67 -1.5,-1.5 s0.67,-1.5 1.5,-1.5 s1.5,0.67 1.5,1.5 S12.83,11.5 12,11.5 Z"/></svg></span>
+                    <span class="button-text">Import to Streisand</span>
                 </a>
             </div>
             <h3>Desktop / Other</h3>
