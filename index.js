@@ -1436,6 +1436,8 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   const clientUrls = {
     // Universal Android link - many clients recognize this
     universalAndroid: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    // Specific Android client
+    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
     // iOS specific links
     shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
     stash: `stash://install-config?url=${encodeURIComponent(subXrayUrl)}`,
@@ -1758,6 +1760,10 @@ function getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayU
                 <a href="${clientUrls.universalAndroid}" class="button client-btn">
                     <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4.3,17.4 L19.7,17.4 L19.7,6.6 L4.3,6.6 L4.3,17.4 Z M3,4 L21,4 C22.1,4 23,4.9 23,6 L23,18 C23,19.1 22.1,20 21,20 L3,20 C1.9,20 1,19.1 1,18 L1,6 C1,4.9 1.9,4 3,4 L3,4 Z"/></svg></span>
                     <span class="button-text">Universal Import (V2rayNG, etc.)</span>
+                </a>
+                 <a href="${clientUrls.karing}" class="button client-btn">
+                    <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+                    <span class="button-text">Import to Karing</span>
                 </a>
             </div>
             <h3>iOS</h3>
