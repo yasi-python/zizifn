@@ -1412,11 +1412,6 @@ async function handleScamalyticsLookup(request, config) {
 }
 
 function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
-  const html = generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate, expTime);
-  return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-}
-
-function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
   const dream = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Xray`,
@@ -1429,20 +1424,26 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
   const subSbUrl   = `https://${hostName}/sb/${userID}`;
-  const subClashUrl = `https://revil-sub.pages.dev/sub/clash-meta?url=${encodeURIComponent(subSbUrl)}`;
-
+  
   const configs = { dream, freedom };
-
-  // Generate universal and app-specific deep links
+  
   const clientUrls = {
-    android: `intent:${subXrayUrl}#Intent;action=android.intent.action.VIEW;scheme=https;end;`,
+    clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
+    karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
     v2rayng: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    hiddify: `hiddify://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    exclave: `sn://subscription?url=${encodeURIComponent(subSbUrl)}`,
+    hiddify: `hiddify://import/?url=${encodeURIComponent(subXrayUrl)}`,
     nekobox: `nekobox://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    clashmeta: `clash://install-config?url=${encodeURIComponent(subClashUrl)}`,
-    shadowrocket: `shadowrocket://add/sub://${btoa(subXrayUrl)}?remark=${encodeURIComponent('REvil-Sub')}`,
-    stash: `stash://install-config?url=${encodeURIComponent(subClashUrl)}`,
-    foox: `foox://add-subscription?url=${encodeURIComponent(subXrayUrl)}`,
+    mahsa: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    nika: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    oneshield: `oneshield://import-config?url=${encodeURIComponent(subXrayUrl)}`,
+    maxray: `maxray://import-config?url=${encodeURIComponent(subXrayUrl)}`,
+    teta: `teta://import-config?url=${encodeURIComponent(subXrayUrl)}`,
+    ford: `ford://import-config?url=${encodeURIComponent(subXrayUrl)}`,
+    // For iOS additional
+    foxray: `foxray://import?url=${encodeURIComponent(subXrayUrl)}`,
+    v2box: `v2box://install-config?url=${encodeURIComponent(subXrayUrl)}`,
+    streisand: `streisand://import?url=${encodeURIComponent(subXrayUrl)}`,
   };
 
   let expirationBlock = '';
@@ -1466,114 +1467,234 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>${getPageCSS()}</style> 
   </head>
-  <body data-proxy-ip="${proxyAddress}" data-sub-link="${subXrayUrl}">
-    ${getPageHTML(configs, clientUrls)}
+  <body data-proxy-ip="${proxyAddress}">
+    ${getPageHTML(configs, clientUrls).replace(
+        '<p>Copy the configuration or import directly into your client</p>', 
+        `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
+    )}
     <script>${getPageScript()}</script>
   </body>
-  </html>`.replace(
-    '<p>Copy the configuration or import directly into your client</p>', 
-    `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
-  );
+  </html>`;
 
-  return finalHTML;
+  return new Response(finalHTML, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 function getPageCSS() {
   return `
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      @font-face {
+      font-family: "Aldine 401 BT Web";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/Aldine401_Mersedeh.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "Styrene B LC";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Regular.woff2") format("woff2");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face {
+      font-family: "Styrene B LC";
+      src: url("https://pub-7a3b428c76aa411181a0f4dd7fa9064b.r2.dev/StyreneBLC-Medium.woff2") format("woff2");
+      font-weight: 500; font-style: normal; font-display: swap;
+    }
       :root {
         --background-primary: #2a2421; --background-secondary: #35302c; --background-tertiary: #413b35;
         --border-color: #5a4f45; --border-color-hover: #766a5f; --text-primary: #e5dfd6; --text-secondary: #b3a89d;
         --text-accent: #ffffff; --accent-primary: #be9b7b; --accent-secondary: #d4b595; --accent-tertiary: #8d6e5c;
         --accent-primary-darker: #8a6f56; --button-text-primary: #2a2421; --button-text-secondary: var(--text-primary);
         --shadow-color: rgba(0, 0, 0, 0.35); --shadow-color-accent: rgba(190, 155, 123, 0.4);
-        --border-radius: 8px; --transition-speed: 0.2s;
+        --border-radius: 8px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
         --status-success: #70b570; --status-error: #e05d44; --status-warning: #e0bc44; --status-info: #4f90c4;
         --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
-        --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
-        --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
-      }
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
+      --mono-serif: "Fira Code", Cantarell, "Courier Prime", monospace;
+    }
       body {
-        font-family: var(--sans-serif); font-size: 16px; background-color: var(--background-primary); color: var(--text-primary);
-        padding: 2rem 1rem; line-height: 1.5; -webkit-font-smoothing: antialiased;
+        font-family: var(--sans-serif); font-size: 16px; font-weight: 400; font-style: normal;
+        background-color: var(--background-primary); color: var(--text-primary);
+        padding: 3rem; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       }
-      .container { max-width: 800px; margin: 0 auto; }
-      .header { text-align: center; margin-bottom: 2.5rem; }
-      .header h1 { font-family: var(--serif); font-weight: 400; font-size: 2.25rem; color: var(--text-accent); margin-bottom: 0.25rem; }
-      .header p { color: var(--text-secondary); }
       #expiration-display { font-size: 0.9em; text-align: center; color: var(--text-secondary); margin-top: 8px; }
       #expiration-display span { display: block; margin-top: 4px; font-size: 0.9em; }
       #expiration-display strong { color: var(--text-primary); }
-      .config-card {
-        background: var(--background-secondary); border-radius: var(--border-radius); padding: 1.5rem; margin-bottom: 1.5rem;
-        border: 1px solid var(--border-color); transition: all var(--transition-speed) ease;
+      .container {
+        max-width: 800px; margin: 20px auto; padding: 0 12px; border-radius: var(--border-radius);
+        box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2), 0 0 25px 8px var(--shadow-color-accent);
+        transition: box-shadow var(--transition-speed-medium) ease;
       }
+      .container:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), 0 0 35px 10px var(--shadow-color-accent); }
+      .header { text-align: center; margin-bottom: 40px; padding-top: 30px; }
+      .header h1 { font-family: var(--serif); font-weight: 400; font-size: 1.8rem; color: var(--text-accent); margin-top: 0px; margin-bottom: 2px; }
+      .header p { color: var(--text-secondary); font-size: 0.6rem; font-weight: 400; }
+      .config-card {
+        background: var(--background-secondary); border-radius: var(--border-radius); padding: 20px; margin-bottom: 24px; border: 1px solid var(--border-color);
+        transition: border-color var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+      }
+      .config-card:hover { border-color: var(--border-color-hover); box-shadow: 0 4px 8px var(--shadow-color); }
       .config-title {
-        font-family: var(--serif); font-size: 1.5rem; color: var(--accent-secondary); margin-bottom: 1rem;
-        padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color);
+        font-family: var(--serif); font-size: 1.6rem; font-weight: 400; color: var(--accent-secondary);
+        margin-bottom: 16px; padding-bottom: 13px; border-bottom: 1px solid var(--border-color);
         display: flex; align-items: center; justify-content: space-between;
       }
-      .button, button {
-        display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 16px;
-        border-radius: var(--border-radius); font-size: 1rem; font-weight: 500; cursor: pointer;
-        border: 1px solid var(--border-color); background-color: var(--background-tertiary); color: var(--button-text-secondary);
-        transition: all var(--transition-speed) ease; text-decoration: none; user-select: none;
+      .config-title .refresh-btn {
+        position: relative; overflow: hidden; display: flex; align-items: center; gap: 4px;
+        font-family: var(--serif); font-size: 12px; padding: 6px 12px; border-radius: 6px;
+        color: var(--accent-secondary); background-color: var(--background-tertiary); border: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, color var(--transition-speed) ease, transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
       }
-      .button:hover, button:hover { border-color: var(--border-color-hover); background-color: #4d453e; }
-      .button:active, button:active { transform: scale(0.98); }
-      .client-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
+      .config-title .refresh-btn::before {
+        content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transform: translateX(-100%); transition: transform var(--transition-speed-long) ease; z-index: 1;
+      }
+      .config-title .refresh-btn:hover {
+        letter-spacing: 0.5px; font-weight: 600; background-color: #4d453e; color: var(--accent-primary);
+        border-color: var(--border-color-hover); transform: translateY(-2px); box-shadow: 0 4px 8px var(--shadow-color);
+      }
+      .config-title .refresh-btn:hover::before { transform: translateX(100%); }
+      .config-title .refresh-btn:active { transform: translateY(0px) scale(0.98); box-shadow: none; }
+      .refresh-icon { width: 12px; height: 12px; stroke: currentColor; }
+      .config-content {
+        position: relative; background: var(--background-tertiary); border-radius: var(--border-radius);
+        padding: 16px; margin-bottom: 20px; border: 1px solid var(--border-color);
+      }
+      .config-content pre {
+        overflow-x: auto; font-family: var(--mono-serif); font-size: 7px; color: var(--text-primary);
+        margin: 0; white-space: pre-wrap; word-break: break-all;
+      }
+      .button {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        padding: 8px 16px; border-radius: var(--border-radius); font-size: 15px; font-weight: 500;
+        cursor: pointer; border: 1px solid var(--border-color); background-color: var(--background-tertiary);
+        color: var(--button-text-secondary);
+        transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, color var(--transition-speed) ease, transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+        -webkit-tap-highlight-color: transparent; touch-action: manipulation; text-decoration: none; overflow: hidden; z-index: 1;
+      }
+      .button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+      .button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; box-shadow: none; transition: opacity var(--transition-speed) ease; }
+      .copy-buttons {
+        position: relative; display: flex; gap: 4px; overflow: hidden; align-self: center;
+        font-family: var(--serif); font-size: 13px; padding: 6px 12px; border-radius: 6px;
+        color: var(--accent-secondary); border: 1px solid var(--border-color);
+        transition: background-color var(--transition-speed) ease, border-color var(--transition-speed) ease, color var(--transition-speed) ease, transform var(--transition-speed) ease, box-shadow var(--transition-speed) ease;
+      }
+      .copy-buttons::before, .client-btn::before {
+        content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transform: translateX(-100%); transition: transform var(--transition-speed-long) ease; z-index: -1;
+      }
+      .copy-buttons:hover::before, .client-btn:hover::before { transform: translateX(100%); }
+      .copy-buttons:hover {
+        background-color: #4d453e; letter-spacing: 0.5px; font-weight: 600;
+        border-color: var(--border-color-hover); transform: translateY(-2px); box-shadow: 0 4px 8px var(--shadow-color);
+      }
+      .copy-buttons:active { transform: translateY(0px) scale(0.98); box-shadow: none; }
+      .copy-icon { width: 12px; height: 12px; stroke: currentColor; }
+      .client-buttons { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; margin-top: 16px; }
       .client-btn {
-        width: 100%; background-color: var(--accent-primary); color: var(--button-text-primary);
-        border-color: var(--accent-primary-darker);
+        width: 100%; background-color: var(--accent-primary); color: var(--background-tertiary);
+        border-radius: 6px; border-color: var(--accent-primary-darker); position: relative; overflow: hidden;
+        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1); box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
       }
-      .client-btn:hover { background-color: var(--accent-secondary); border-color: var(--accent-secondary); }
-      .client-icon { width: 20px; height: 20px; }
-      .universal-btn {
-          background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary));
-          color: var(--button-text-primary); border: none; font-weight: 600;
-          grid-column: 1 / -1; font-size: 1.1rem; padding: 12px 16px;
+      .client-btn::after {
+        content: ''; position: absolute; bottom: -5px; left: 0; width: 100%; height: 5px;
+        background: linear-gradient(90deg, var(--accent-tertiary), var(--accent-secondary));
+        opacity: 0; transition: all 0.3s ease; z-index: 0;
       }
-      .universal-btn:hover { box-shadow: 0 0 15px rgba(190, 155, 123, 0.5); transform: translateY(-2px); }
-      .config-content { background: var(--background-tertiary); border-radius: var(--border-radius); padding: 1rem; margin: 1rem 0; }
-      .config-content pre { overflow-x: auto; font-family: var(--mono-serif); font-size: 0.8rem; color: var(--text-primary); white-space: pre-wrap; word-break: break-all; }
-      .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; }
-      .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 1rem; }
-      .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem; margin-bottom: 0.75rem; }
-      .ip-info-header h3 { font-family: var(--serif); font-size: 1.25rem; color: var(--accent-secondary); }
-      .ip-info-item { margin-bottom: 0.5rem; }
-      .ip-info-item .label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; }
-      .ip-info-item .value { font-size: 1rem; word-break: break-all; }
-      .badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 500; }
-      .badge-yes { background-color: rgba(112, 181, 112, 0.2); color: #8de98d; }
-      .badge-no { background-color: rgba(224, 93, 68, 0.2); color: #ff8b7d; }
-      .badge-warning { background-color: rgba(224, 188, 68, 0.2); color: #ffdf85; }
-      .skeleton { display: inline-block; background: linear-gradient(90deg, var(--background-tertiary) 25%, #4a423c 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 1em; width: 120px; }
-      @keyframes loading { to { background-position: -200% 0; } }
-      .country-flag { display: inline-block; width: 1.2em; height: 0.9em; margin-right: 0.5em; vertical-align: middle; border-radius: 2px; }
-      /* iOS Modal Styles */
-      .ios-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; justify-content: center; align-items: center; opacity: 0; visibility: hidden; transition: opacity 0.3s; }
-      .ios-modal-overlay.show { opacity: 1; visibility: visible; }
-      .ios-modal { background: var(--background-secondary); padding: 2rem; border-radius: var(--border-radius); border: 1px solid var(--border-color); width: 90%; max-width: 400px; text-align: center; }
-      .ios-modal h2 { font-family: var(--serif); margin-bottom: 1.5rem; color: var(--accent-secondary); }
-      .ios-modal .client-buttons { grid-template-columns: 1fr; }
-      .footer { text-align: center; margin-top: 3rem; color: var(--text-secondary); font-size: 0.8rem; }
+      .client-btn:hover {
+        text-transform: uppercase; letter-spacing: 0.3px; transform: translateY(-3px);
+        background-color: var(--accent-secondary); color: var(--button-text-primary);
+        box-shadow: 0 5px 15px rgba(190, 155, 123, 0.5); border-color: var(--accent-secondary);
+      }
+      .client-btn:hover::after { opacity: 1; bottom: 0; }
+      .client-btn:active { transform: translateY(0) scale(0.98); box-shadow: 0 2px 3px rgba(0, 0, 0, 0.2); background-color: var(--accent-primary-darker); }
+      .client-btn .client-icon { position: relative; z-index: 2; transition: transform 0.3s ease; }
+      .client-btn:hover .client-icon { transform: rotate(15deg) scale(1.1); }
+      .client-btn .button-text { position: relative; z-index: 2; transition: letter-spacing 0.3s ease; }
+      .client-btn:hover .button-text { letter-spacing: 0.5px; }
+    .client-icon { width: 18px; height: 18px; border-radius: 6px; background-color: var(--background-secondary); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .client-icon svg { width: 14px; height: 14px; fill: var(--accent-secondary); }
+    .button.copied { background-color: var(--accent-secondary) !important; color: var(--background-tertiary) !important; }
+    .button.error { background-color: #c74a3b !important; color: var(--text-accent) !important; }
+    .footer { text-align: center; margin-top: 20px; margin-bottom: 40px; color: var(--text-secondary); font-size: 8px; }
+    .footer p { margin-bottom: 0px; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: var(--background-primary); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 4px; border: 2px solid var(--background-primary); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border-color-hover); }
+    * { scrollbar-width: thin; scrollbar-color: var(--border-color) var(--background-primary); }
+    .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 24px; }
+    .ip-info-section { background-color: var(--background-tertiary); border-radius: var(--border-radius); padding: 16px; border: 1px solid var(--border-color); display: flex; flex-direction: column; gap: 20px; }
+    .ip-info-header { display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+    .ip-info-header svg { width: 20px; height: 20px; stroke: var(--accent-secondary); }
+    .ip-info-header h3 { font-family: var(--serif); font-size: 18px; font-weight: 400; color: var(--accent-secondary); margin: 0; }
+    .ip-info-content { display: flex; flex-direction: column; gap: 10px; }
+    .ip-info-item { display: flex; flex-direction: column; gap: 2px; }
+    .ip-info-item .label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+    .ip-info-item .value { font-size: 14px; color: var(--text-primary); word-break: break-all; line-height: 1.4; }
+    .badge { display: inline-flex; align-items: center; justify-content: center; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+    .badge-yes { background-color: rgba(112, 181, 112, 0.15); color: var(--status-success); border: 1px solid rgba(112, 181, 112, 0.3); }
+    .badge-no { background-color: rgba(224, 93, 68, 0.15); color: var(--status-error); border: 1px solid rgba(224, 93, 68, 0.3); }
+    .badge-neutral { background-color: rgba(79, 144, 196, 0.15); color: var(--status-info); border: 1px solid rgba(79, 144, 196, 0.3); }
+    .badge-warning { background-color: rgba(224, 188, 68, 0.15); color: var(--status-warning); border: 1px solid rgba(224, 188, 68, 0.3); }
+    .skeleton { display: block; background: linear-gradient(90deg, var(--background-tertiary) 25%, var(--background-secondary) 50%, var(--background-tertiary) 75%); background-size: 200% 100%; animation: loading 1.5s infinite; border-radius: 4px; height: 16px; }
+    @keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .country-flag { display: inline-block; width: 18px; height: auto; max-height: 14px; margin-right: 6px; vertical-align: middle; border-radius: 2px; }
+    @media (max-width: 768px) {
+      body { padding: 20px; } .container { padding: 0 14px; width: min(100%, 768px); }
+      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 18px; }
+      .header h1 { font-size: 1.8rem; } .header p { font-size: 0.7rem }
+      .ip-info-section { padding: 14px; gap: 18px; } .ip-info-header h3 { font-size: 16px; }
+      .ip-info-header { gap: 8px; } .ip-info-content { gap: 8px; }
+      .ip-info-item .label { font-size: 11px; } .ip-info-item .value { font-size: 13px; }
+      .config-card { padding: 16px; } .config-title { font-size: 18px; }
+      .config-title .refresh-btn { font-size: 11px; } .config-content pre { font-size: 12px; }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+      .button { font-size: 12px; } .copy-buttons { font-size: 11px; }
+    }
+    @media (max-width: 480px) {
+      body { padding: 16px; } .container { padding: 0 12px; width: min(100%, 390px); }
+      .header h1 { font-size: 20px; } .header p { font-size: 8px; }
+      .ip-info-section { padding: 14px; gap: 16px; }
+      .ip-info-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+      .ip-info-header h3 { font-size: 14px; } .ip-info-header { gap: 6px; } .ip-info-content { gap: 6px; }
+      .ip-info-header svg { width: 18px; height: 18px; } .ip-info-item .label { font-size: 9px; }
+      .ip-info-item .value { font-size: 11px; } .badge { padding: 2px 6px; font-size: 10px; border-radius: 10px; }
+      .config-card { padding: 10px; } .config-title { font-size: 16px; }
+      .config-title .refresh-btn { font-size: 10px; } .config-content { padding: 12px; }
+      .config-content pre { font-size: 10px; }
+      .client-buttons { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+      .button { padding: 4px 8px; font-size: 11px; } .copy-buttons { font-size: 10px; } .footer { font-size: 10px; }
+      }
+    @media (max-width: 359px) {
+          body { padding: 12px; font-size: 14px; } .container { max-width: 100%; padding: 8px; }
+          .header h1 { font-size: 16px; } .header p { font-size: 6px; }
+          .ip-info-section { padding: 12px; gap: 12px; }
+          .ip-info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+          .ip-info-header h3 { font-size: 13px; } .ip-info-header { gap: 4px; } .ip-info-content { gap: 4px; }
+          .ip-info-header svg { width: 16px; height: 16px; } .ip-info-item .label { font-size: 8px; }
+  .ip-info-item .value { font-size: 10px; } .badge { padding: 1px 4px; font-size: 9px; border-radius: 8px; }
+          .config-card { padding: 8px; } .config-title { font-size: 13px; } .config-title .refresh-btn { font-size: 9px; }
+          .config-content { padding: 8px; } .config-content pre { font-size: 8px; }
+  .client-buttons { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+          .button { padding: 3px 6px; font-size: 10px; } .copy-buttons { font-size: 9px; } .footer { font-size: 7px; }
+        }
+     
+        @media (min-width: 360px) { .container { max-width: 95%; } }
+        @media (min-width: 480px) { .container { max-width: 90%; } }
+        @media (min-width: 640px) { .container { max-width: 600px; } }
+        @media (min-width: 768px) { .container { max-width: 720px; } }
+        @media (min-width: 1024px) { .container { max-width: 800px; } }
   `;
 }
 
 function getPageHTML(configs, clientUrls) {
   return `
-    <div id="ios-modal" class="ios-modal-overlay">
-      <div class="ios-modal">
-        <h2 id="ios-modal-title">Add Subscription to iOS</h2>
-        <div class="client-buttons">
-          <a href="${clientUrls.shadowrocket}" class="button client-btn">Import to Shadowrocket</a>
-          <a href="${clientUrls.stash}" class="button client-btn">Import to Stash</a>
-          <a href="${clientUrls.foox}" class="button client-btn">Import to Foox</a>
-        </div>
-        <button id="ios-modal-close" class="button" style="margin-top: 1.5rem; background-color: var(--background-tertiary);">Close</button>
-      </div>
-    </div>
-
     <div class="container">
       <div class="header">
         <h1>VLESS Proxy Configuration</h1>
@@ -1581,52 +1702,146 @@ function getPageHTML(configs, clientUrls) {
       </div>
 
       <div class="config-card">
-        <div class="config-title"><span>Network Information</span><button id="refresh-ip-info" class="button">Refresh</button></div>
+        <div class="config-title">
+          <span>Network Information</span>
+          <button id="refresh-ip-info" class="refresh-btn" aria-label="Refresh IP information">
+            <svg class="refresh-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2" />
+            </svg>
+            Refresh
+          </button>
+        </div>
         <div class="ip-info-grid">
           <div class="ip-info-section">
-            <div class="ip-info-header"><h3>Proxy Server</h3></div>
-            <div class="ip-info-item"><span class="label">Proxy Host</span><span class="value" id="proxy-host"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">IP Address</span><span class="value" id="proxy-ip"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">Location</span><span class="value" id="proxy-location"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">ISP Provider</span><span class="value" id="proxy-isp"><span class="skeleton"></span></span></div>
+            <div class="ip-info-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15.5 2H8.6c-.4 0-.8.2-1.1.5-.3.3-.5.7-.5 1.1v16.8c0 .4.2.8.5 1.1.3.3.7.5 1.1.5h6.9c.4 0 .8-.2 1.1-.5.3-.3.5-.7.5-1.1V3.6c0-.4-.2-.8-.5-1.1-.3-.3-.7-.5-1.1-.5z" />
+                <circle cx="12" cy="18" r="1" />
+              </svg>
+              <h3>Proxy Server</h3>
+            </div>
+            <div class="ip-info-content">
+              <div class="ip-info-item"><span class="label">Proxy Host</span><span class="value" id="proxy-host"><span class="skeleton" style="width: 150px"></span></span></div>
+              <div class="ip-info-item"><span class="label">IP Address</span><span class="value" id="proxy-ip"><span class="skeleton" style="width: 120px"></span></span></div>
+              <div class="ip-info-item"><span class="label">Location</span><span class="value" id="proxy-location"><span class="skeleton" style="width: 100px"></span></span></div>
+              <div class="ip-info-item"><span class="label">ISP Provider</span><span class="value" id="proxy-isp"><span class="skeleton" style="width: 140px"></span></span></div>
+            </div>
           </div>
           <div class="ip-info-section">
-            <div class="ip-info-header"><h3>Your Connection</h3></div>
-            <div class="ip-info-item"><span class="label">Your IP</span><span class="value" id="client-ip"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">Location</span><span class="value" id="client-location"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">ISP Provider</span><span class="value" id="client-isp"><span class="skeleton"></span></span></div>
-            <div class="ip-info-item"><span class="label">Risk Score</span><span class="value" id="client-proxy"><span class="skeleton" style="width: 80px;"></span></span></div>
+            <div class="ip-info-header">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16" />
+              </svg>
+              <h3>Your Connection</h3>
+            </div>
+            <div class="ip-info-content">
+              <div class="ip-info-item"><span class="label">Your IP</span><span class="value" id="client-ip"><span class="skeleton" style="width: 110px"></span></span></div>
+              <div class="ip-info-item"><span class="label">Location</span><span class="value" id="client-location"><span class="skeleton" style="width: 90px"></span></span></div>
+              <div class="ip-info-item"><span class="label">ISP Provider</span><span class="value" id="client-isp"><span class="skeleton" style="width: 130px"></span></span></div>
+              <div class="ip-info-item"><span class="label">Risk Score</span><span class="value" id="client-proxy"><span class="skeleton" style="width: 100px"></span></span></div>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="config-card">
-        <div class="config-title"><span>Universal Subscription</span></div>
+        <div class="config-title">
+          <span>Xray Core Clients</span>
+          <button id="copy-xray-btn" class="button copy-buttons">
+            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            Copy
+          </button>
+        </div>
+        <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
+        <button class="button" onclick="toggleQR('xray')">Show QR Code</button>
+        <div id="qr-xray-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-xray"></div></div>
         <div class="client-buttons">
-            <button id="universal-import-btn" class="button universal-btn">
-                <span class="button-text">Add Subscription (All Platforms)</span>
-            </button>
+          <a href="${configs.dream}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import Single Config</span>
+          </a>
+          <a href="${clientUrls.karing}" class="button client-btn">
+             <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+             <span class="button-text">Import to Karing (All)</span>
+          </a>
+          <a href="${clientUrls.v2rayng}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to V2rayNG (All)</span>
+          </a>
+          <a href="${clientUrls.hiddify}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to HiddifyNG (All)</span>
+          </a>
+          <a href="${clientUrls.nekobox}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to Nekobox (All)</span>
+          </a>
+          <a href="${clientUrls.mahsa}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to MahsaNG (All)</span>
+          </a>
+          <a href="${clientUrls.nika}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to NikaNG (All)</span>
+          </a>
+          <a href="${clientUrls.oneshield}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to One Shield VIP (All)</span>
+          </a>
+          <a href="${clientUrls.maxray}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to MaxRay Free VPN (All)</span>
+          </a>
+          <a href="${clientUrls.teta}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to TETA VPN (All)</span>
+          </a>
+          <a href="${clientUrls.ford}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to Ford VPN (All)</span>
+          </a>
+          <a href="${clientUrls.foxray}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to FoXray (iOS, All)</span>
+          </a>
+          <a href="${clientUrls.v2box}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to V2Box (iOS, All)</span>
+          </a>
+          <a href="${clientUrls.streisand}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2L4 5v6c0 5.5 3.5 10.7 8 12.3 4.5-1.6 8-6.8 8-12.3V5l-8-3z" /></svg></span>
+            <span class="button-text">Import to Streisand (iOS, All)</span>
+          </a>
         </div>
       </div>
 
       <div class="config-card">
-        <div class="config-title"><span>Specific Clients</span></div>
+        <div class="config-title">
+          <span>Sing-Box Core Clients</span>
+          <button id="copy-singbox-btn" class="button copy-buttons">
+            <svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+            Copy
+          </button>
+        </div>
+        <div class="config-content"><pre id="singbox-config">${configs.freedom}</pre></div>
+        <button class="button" onclick="toggleQR('singbox')">Show QR Code</button>
+        <div id="qr-singbox-container" style="display:none; text-align:center; margin-top: 10px;"><div id="qr-singbox"></div></div>
         <div class="client-buttons">
-          <a href="${clientUrls.v2rayng}" class="button client-btn">Import to V2rayNG</a>
-          <a href="${clientUrls.hiddify}" class="button client-btn">Import to Hiddify</a>
-          <a href="${clientUrls.nekobox}" class="button client-btn">Import to NekoBox</a>
-          <a href="${clientUrls.clashmeta}" class="button client-btn">Import to Clash Meta</a>
+          <a href="${clientUrls.clashMeta}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" /></svg></span>
+            <span class="button-text">Import to Clash Meta</span>
+          </a>
+          <a href="${clientUrls.exclave}" class="button client-btn">
+            <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M20,8h-3V6c0-1.1-0.9-2-2-2H9C7.9,4,7,4.9,7,6v2H4C2.9,8,2,8.9,2,10v9c0,1.1,0.9,2,2,2h16c1.1,0,2-0.9,2-2v-9 C22,8.9,21.1,8,20,8z M9,6h6v2H9V6z M20,19H4v-2h16V19z M20,15H4v-5h3v1c0,0.55,0.45,1,1,1h1.5c0.28,0,0.5-0.22,0.5-0.5v-0.5h4v0.5 c0,0.28,0.22,0.5,0.5,0.5H16c0.55,0,1-0.45,1-1v-1h3V15z" /><circle cx="8.5" cy="13.5" r="1" /><circle cx="15.5" cy="13.5" r="1" /><path d="M12,15.5c-0.55,0-1-0.45-1-1h2C13,15.05,12.55,15.5,12,15.5z" /></svg></span>
+            <span class="button-text">Import to Exclave</span>
+          </a>
         </div>
       </div>
-      
-      <div class="config-card">
-          <div class="config-title"><span>Manual Setup</span><button id="copy-xray-btn" class="button">Copy Link</button></div>
-          <div class="config-content"><pre id="xray-config">${configs.dream}</pre></div>
-          <button class="button" onclick="toggleQR('xray')">Show QR Code</button>
-          <div id="qr-xray-container" style="display:none; text-align:center; margin-top: 1rem;"><div id="qr-xray"></div></div>
+
+      <div class="footer">
+        <p>© <span id="current-year">${new Date().getFullYear()}</span> REvil - All Rights Reserved</p>
+        <p>Secure. Private. Fast.</p>
       </div>
-      
-      <div class="footer"><p>© ${new Date().getFullYear()} REvil - All Rights Reserved</p></div>
     </div>
   `;
 }
@@ -1636,23 +1851,31 @@ function getPageScript() {
       function copyToClipboard(button, text) {
         const originalHTML = button.innerHTML;
         navigator.clipboard.writeText(text).then(() => {
-          button.innerHTML = 'Copied!';
+          button.innerHTML = \`<svg class="copy-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copied!\`;
+          button.classList.add("copied");
           button.disabled = true;
           setTimeout(() => {
             button.innerHTML = originalHTML;
+            button.classList.remove("copied");
             button.disabled = false;
-          }, 1500);
-        }).catch(err => console.error("Failed to copy: ", err));
+          }, 1200);
+        }).catch(err => {
+          console.error("Failed to copy text: ", err);
+        });
       }
 
       function toggleQR(id) {
-        const container = document.getElementById('qr-' + id + '-container');
-        if (container.style.display === 'none') {
+        var container = document.getElementById('qr-' + id + '-container');
+        if (container.style.display === 'none' || container.style.display === '') {
           container.style.display = 'block';
-          if (!container.firstElementChild.hasChildNodes()) {
-            new QRCode(container.firstElementChild, {
+          if (!container.querySelector('#qr-' + id).hasChildNodes()) {
+            new QRCode(document.getElementById('qr-' + id), {
               text: document.getElementById(id + '-config').textContent,
-              width: 256, height: 256
+              width: 256,
+              height: 256,
+              colorDark: "#000000",
+              colorLight: "#ffffff",
+              correctLevel: QRCode.CorrectLevel.H
             });
           }
         } else {
@@ -1660,64 +1883,195 @@ function getPageScript() {
         }
       }
 
-      async function fetchJson(url) {
-          const response = await fetch(url);
+      async function fetchClientPublicIP() {
+        try {
+          const response = await fetch('https://api.ipify.org?format=json');
           if (!response.ok) throw new Error(\`HTTP error! status: \${response.status}\`);
-          return response.json();
+          return (await response.json()).ip;
+        } catch (error) {
+          console.error('Error fetching client IP:', error);
+          return null;
+        }
       }
 
-      function updateIpDisplay(data, prefix, host = null) {
-          const get = (id) => document.getElementById(\`\${prefix}-\${id}\`);
-          if (host) get('host').textContent = host;
-          get('ip').textContent = data.ip || 'N/A';
-          const location = [data.city, data.country_name].filter(Boolean).join(', ');
-          get('location').innerHTML = data.country_code ? \`<img src="https://flagcdn.com/w20/\${data.country_code.toLowerCase()}.png" class="country-flag" alt="\${data.country_code}"> \${location}\` : location || 'N/A';
-          get('isp').textContent = data.isp || data.organisation || 'N/A';
-      }
-      
-      function updateScamalyticsDisplay(data) {
-          const el = document.getElementById('client-proxy');
-          if (!data || data.status !== 'ok') {
-              el.innerHTML = '<span class="badge">N/A</span>';
-              return;
+      async function fetchScamalyticsClientInfo(clientIp) {
+        if (!clientIp) return null;
+        try {
+          const response = await fetch(\`/scamalytics-lookup?ip=\${encodeURIComponent(clientIp)}\`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(\`Worker request failed! status: \${response.status}, details: \${errorText}\`);
           }
-          const risk = data.risk;
-          let badgeClass = '';
-          if (risk === "low") badgeClass = "badge-yes";
-          else if (risk === "medium") badgeClass = "badge-warning";
-          else if (risk === "high") badgeClass = "badge-no";
-          el.innerHTML = \`<span class="badge \${badgeClass}">\${data.score} - \${risk}</span>\`;
+          const data = await response.json();
+          if (data.scamalytics && data.scamalytics.status === 'error') {
+              throw new Error(data.scamalytics.error || 'Scamalytics API error via Worker');
+          }
+          return data;
+        } catch (error) {
+          console.error('Error fetching from Scamalytics via Worker:', error);
+          return null;
+        }
+      }
+
+      function updateScamalyticsClientDisplay(data) {
+        const prefix = 'client';
+        if (!data  || !data.scamalytics  || data.scamalytics.status !== 'ok') {
+          showError(prefix, (data && data.scamalytics && data.scamalytics.error) || 'Could not load client data from Scamalytics');
+          return;
+        }
+        const sa = data.scamalytics;
+        const dbip = data.external_datasources?.dbip;
+        const elements = {
+          ip: document.getElementById(\`\${prefix}-ip\`), location: document.getElementById(\`\${prefix}-location\`),
+          isp: document.getElementById(\`\${prefix}-isp\`), proxy: document.getElementById(\`\${prefix}-proxy\`)
+        };
+        if (elements.ip) elements.ip.textContent = sa.ip || "N/A";
+        if (elements.location) {
+          const city = dbip?.ip_city || '';
+          const countryName = dbip?.ip_country_name || '';
+          const countryCode = dbip?.ip_country_code ? dbip.ip_country_code.toLowerCase() : '';
+          let locationString = 'N/A';
+          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${dbip.ip_country_code}" class="country-flag"> \` : '';
+          let textPart = [city, countryName].filter(Boolean).join(', ');
+          if (flagElementHtml || textPart) locationString = \`\${flagElementHtml}\${textPart}\`.trim();
+          elements.location.innerHTML = locationString || "N/A";
+        }
+        if (elements.isp) elements.isp.textContent = sa.scamalytics_isp  || dbip?.isp_name  || "N/A";
+        if (elements.proxy) {
+          const score = sa.scamalytics_score;
+          const risk = sa.scamalytics_risk;
+          let riskText = "Unknown";
+          let badgeClass = "badge-neutral";
+          if (risk && score !== undefined) {
+              riskText = \`\${score} - \${risk.charAt(0).toUpperCase() + risk.slice(1)}\`;
+              switch (risk.toLowerCase()) {
+                  case "low": badgeClass = "badge-yes"; break;
+                  case "medium": badgeClass = "badge-warning"; break;
+                  case "high": case "very high": badgeClass = "badge-no"; break;
+              }
+          }
+          elements.proxy.innerHTML = \`<span class="badge \${badgeClass}">\${riskText}</span>\`;
+        }
+      }
+
+      function updateIpApiIoDisplay(geo, prefix, originalHost) {
+        const hostElement = document.getElementById(\`\${prefix}-host\`);
+        if (hostElement) hostElement.textContent = originalHost || "N/A";
+        const elements = {
+          ip: document.getElementById(\`\${prefix}-ip\`), location: document.getElementById(\`\${prefix}-location\`),
+          isp: document.getElementById(\`\${prefix}-isp\`)
+        };
+        if (!geo) {
+          Object.values(elements).forEach(el => { if(el) el.innerHTML = "N/A"; });
+          return;
+        }
+        if (elements.ip) elements.ip.textContent = geo.ip || "N/A";
+        if (elements.location) {
+          const city = geo.city || '';
+          const countryName = geo.country_name || '';
+          const countryCode = geo.country_code ? geo.country_code.toLowerCase() : '';
+          let flagElementHtml = countryCode ? \`<img src="https://flagcdn.com/w20/\${countryCode}.png" srcset="https://flagcdn.com/w40/\${countryCode}.png 2x" alt="\${geo.country_code}" class="country-flag"> \` : '';
+          let textPart = [city, countryName].filter(Boolean).join(', ');
+          elements.location.innerHTML = (flagElementHtml || textPart) ? \`\${flagElementHtml}\${textPart}\`.trim() : "N/A";
+        }
+        if (elements.isp) elements.isp.textContent = geo.isp  || geo.organisation  || geo.as_name  || geo.as  || 'N/A';
+      }
+
+      async function fetchIpApiIoInfo(ip) {
+        try {
+          const response = await fetch(\`https://ip-api.io/json/\${ip}\`);
+          if (!response.ok) throw new Error(\`HTTP error! status: \${response.status}\`);
+          return await response.json();
+        } catch (error) {
+          console.error('IP API Error (ip-api.io):', error);
+          return null;
+        }
+      }
+
+      function showError(prefix, message = "Could not load data", originalHostForProxy = null) {
+        const errorMessage = "N/A";
+        const elements = (prefix === 'proxy') 
+          ? ['host', 'ip', 'location', 'isp']
+          : ['ip', 'location', 'isp', 'proxy'];
+         
+        elements.forEach(key => {
+          const el = document.getElementById(\`\${prefix}-\${key}\`);
+          if (!el) return;
+          if (key === 'host' && prefix === 'proxy') el.textContent = originalHostForProxy || errorMessage;
+          else if (key === 'proxy' && prefix === 'client') el.innerHTML = \`<span class="badge badge-neutral">N/A</span>\`;
+          else el.innerHTML = errorMessage;
+        });
+        console.warn(\`\${prefix} data loading failed: \${message}\`);
       }
 
       async function loadNetworkInfo() {
-          try {
-              const proxyHost = document.body.dataset.proxyIp || "N/A";
-              const proxyIp = proxyHost.split(':')[0];
-              if (proxyIp && proxyIp !== "N/A") {
-                  fetchJson(\`https://ip-api.io/json/\${proxyIp}\`).then(data => updateIpDisplay(data, 'proxy', proxyHost));
-              }
+        try {
+          const proxyIpWithPort = document.body.getAttribute('data-proxy-ip') || "N/A";
+          const proxyDomainOrIp = proxyIpWithPort.split(':')[0];
+          const proxyHostEl = document.getElementById('proxy-host');
+          if(proxyHostEl) proxyHostEl.textContent = proxyIpWithPort;
 
-              const clientData = await fetchJson('https://ip-api.io/json/');
-              updateIpDisplay(clientData, 'client');
-              fetch(\`/scamalytics-lookup?ip=\${clientData.ip}\`).then(r => r.json()).then(d => updateScamalyticsDisplay(d.scamalytics));
-          } catch (error) {
-              console.error('Network info loading failed:', error);
+          if (proxyDomainOrIp && proxyDomainOrIp !== "N/A") {
+            let resolvedProxyIp = proxyDomainOrIp;
+            if (!/^\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}$/.test(proxyDomainOrIp) && !/^[0-9a-fA-F:]+$/.test(proxyDomainOrIp)) {
+              try {
+                const dnsRes = await fetch(\`https://dns.google/resolve?name=\${encodeURIComponent(proxyDomainOrIp)}&type=A\`);
+                if (dnsRes.ok) {
+                    const dnsData = await dnsRes.json();
+                    const ipAnswer = dnsData.Answer?.find(a => a.type === 1);
+                    if (ipAnswer) resolvedProxyIp = ipAnswer.data;
+                }
+              } catch (e) { console.error('DNS resolution for proxy failed:', e); }
+            }
+            const proxyGeoData = await fetchIpApiIoInfo(resolvedProxyIp);
+            updateIpApiIoDisplay(proxyGeoData, 'proxy', proxyIpWithPort);
+          } else {
+            showError('proxy', 'Proxy Host not available', proxyIpWithPort);
           }
+
+          const clientIp = await fetchClientPublicIP();
+          if (clientIp) {
+            const clientIpElement = document.getElementById('client-ip');
+            if(clientIpElement) clientIpElement.textContent = clientIp;
+            const scamalyticsData = await fetchScamalyticsClientInfo(clientIp);
+            updateScamalyticsClientDisplay(scamalyticsData);
+          } else {
+            showError('client', 'Could not determine your IP address.');
+          }
+        } catch (error) {
+          console.error('Overall network info loading failed:', error);
+          showError('proxy', \`Error: \${error.message}\`, document.body.getAttribute('data-proxy-ip') || "N/A");
+          showError('client', \`Error: \${error.message}\`);
+        }
       }
 
       function displayExpirationTimes() {
         const expElement = document.getElementById('expiration-display');
         if (!expElement || !expElement.dataset.utcTime) {
-            if (expElement) expElement.textContent = 'No expiration date set.';
+            if (expElement) expElement.textContent = 'Expiration time not available.';
             return;
         }
+
         const utcDate = new Date(expElement.dataset.utcTime);
-        if (isNaN(utcDate.getTime())) return;
-        
-        const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+        if (isNaN(utcDate.getTime())) {
+            expElement.textContent = 'Invalid expiration time format.';
+            return;
+        }
+         
+        const commonOptions = {
+            year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: true, timeZoneName: 'short'
+        };
+
+        const localTimeStr = utcDate.toLocaleString(undefined, commonOptions);
+        const tehranTimeStr = utcDate.toLocaleString('en-US', { ...commonOptions, timeZone: 'Asia/Tehran' });
+        const utcTimeStr = utcDate.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+
         expElement.innerHTML = \`
-          <span><strong>Your Local Time:</strong> \${utcDate.toLocaleString(undefined, {...options, timeZoneName: 'short'})}</span>
-          <span><strong>Tehran Time:</strong> \${utcDate.toLocaleString('en-US', {...options, timeZone: 'Asia/Tehran'})}</span>
+          <span><strong>Your Local Time:</strong> \${localTimeStr}</span>
+          <span><strong>Tehran Time:</strong> \${tehranTimeStr}</span>
+          <span><strong>Universal Time:</strong> \${utcTimeStr}</span>
         \`;
       }
 
@@ -1725,40 +2079,49 @@ function getPageScript() {
         loadNetworkInfo();
         displayExpirationTimes();
 
-        const universalBtn = document.getElementById('universal-import-btn');
-        const subLink = document.body.dataset.subLink;
-        
-        const ua = navigator.userAgent;
-        const isAndroid = /android/i.test(ua);
-        const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        // Attach event listeners for copy buttons
+        const copyXrayBtn = document.getElementById('copy-xray-btn');
+        if (copyXrayBtn) {
+            copyXrayBtn.addEventListener('click', function() {
+                const textToCopy = document.getElementById('xray-config').textContent;
+                copyToClipboard(this, textToCopy);
+            });
+        }
 
-        if (universalBtn) {
-            universalBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                if (isAndroid) {
-                    window.location.href = \`intent:\${subLink}#Intent;action=android.intent.action.VIEW;scheme=https;end;\`;
-                } else if (isIOS) {
-                    document.getElementById('ios-modal').classList.add('show');
-                } else {
-                    // For Desktop, copy the subscription link
-                    copyToClipboard(universalBtn, subLink);
-                }
+        const copySingboxBtn = document.getElementById('copy-singbox-btn');
+        if (copySingboxBtn) {
+            copySingboxBtn.addEventListener('click', function() {
+                const textToCopy = document.getElementById('singbox-config').textContent;
+                copyToClipboard(this, textToCopy);
             });
         }
         
-        const iosModal = document.getElementById('ios-modal');
-        const closeModalBtn = document.getElementById('ios-modal-close');
-        if (iosModal && closeModalBtn) {
-            closeModalBtn.addEventListener('click', () => iosModal.classList.remove('show'));
-            iosModal.addEventListener('click', (e) => {
-                if(e.target === iosModal) iosModal.classList.remove('show');
-            });
-        }
-        
-        document.getElementById('copy-xray-btn')?.addEventListener('click', function() {
-            copyToClipboard(this, document.getElementById('xray-config').textContent);
+        document.getElementById('refresh-ip-info')?.addEventListener('click', function() {
+            const button = this;
+            const icon = button.querySelector('.refresh-icon');
+            button.disabled = true;
+            if (icon) icon.style.animation = 'spin 1s linear infinite';
+    
+            const resetToSkeleton = (prefix) => {
+              const elementsToReset = ['ip', 'location', 'isp'];
+              if (prefix === 'proxy') elementsToReset.push('host');
+              if (prefix === 'client') elementsToReset.push('proxy');
+              elementsToReset.forEach(key => {
+                const element = document.getElementById(\`\${prefix}-\${key}\`);
+                if (element) element.innerHTML = \`<span class="skeleton" style="width: 120px;"></span>\`;
+              });
+            };
+    
+            resetToSkeleton('proxy');
+            resetToSkeleton('client');
+            loadNetworkInfo().finally(() => setTimeout(() => {
+              button.disabled = false; if (icon) icon.style.animation = '';
+            }, 1000));
         });
-        document.getElementById('refresh-ip-info')?.addEventListener('click', loadNetworkInfo);
       });
+
+      const style = document.createElement('style');
+      style.textContent = \`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }\`;
+      document.head.appendChild(style);
   `;
 }
