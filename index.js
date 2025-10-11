@@ -1784,7 +1784,7 @@ function getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayU
             </div>
             <h3>Desktop / Other</h3>
             <div class="client-buttons">
-              <button class="button client-btn" onclick="toggleQR('xray')">
+              <button class="button client-btn" onclick="toggleQR('xray', '${subXrayUrl}')">
                 <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm0 10h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6zm-4-3h2v2h-2zm0-4h2v2h-2zm-4 0h2v2H6zm-2-2h2v2H4zm12 0h2v2h-2zM9 6h2v2H9zm4 0h2v2h-2zm2 5h2v2h-2zM9 13h2v2H9zm-2 2h2v2H7zm-2-2h2v2H5z"/></svg></span>
                 <span class="button-text">Show QR Code</span>
               </button>
@@ -1812,7 +1812,7 @@ function getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayU
             </div>
             <h3>Desktop / Other</h3>
              <div class="client-buttons">
-              <button class="button client-btn" onclick="toggleQR('singbox')">
+              <button class="button client-btn" onclick="toggleQR('singbox', '${subSbUrl}')">
                 <span class="client-icon"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zm0 10h6v6H4zm10-10h6v6h-6zm0 10h6v6h-6zm-4-3h2v2h-2zm0-4h2v2h-2zm-4 0h2v2H6zm-2-2h2v2H4zm12 0h2v2h-2zM9 6h2v2H9zm4 0h2v2h-2zm2 5h2v2h-2zM9 13h2v2H9zm-2 2h2v2H7zm-2-2h2v2H5z"/></svg></span>
                 <span class="button-text">Show QR Code</span>
               </button>
@@ -1847,22 +1847,30 @@ function getPageScript() {
         });
       }
 
-      function toggleQR(id) {
+      function toggleQR(id, url) {
         var container = document.getElementById('qr-' + id + '-container');
         if (container.style.display === 'none' || container.style.display === '') {
-          container.style.display = 'block';
-          if (!container.querySelector('#qr-' + id).hasChildNodes()) {
-            new QRCode(document.getElementById('qr-' + id), {
-              text: document.getElementById(id + '-config').textContent,
-              width: 256,
-              height: 256,
-              colorDark: "#2a2421",
-              colorLight: "#e5dfd6",
-              correctLevel: QRCode.CorrectLevel.H
-            });
-          }
+            container.style.display = 'block';
+            if (!url) {
+                console.error("Subscription URL for QR code is missing.");
+                container.innerHTML = "<p style='color:red; padding: 10px;'>Error: Subscription URL not provided.</p>";
+                return;
+            }
+            // Clear previous QR code before generating a new one
+            var qrElement = document.getElementById('qr-' + id);
+            qrElement.innerHTML = ''; 
+            if (!qrElement.hasChildNodes()) {
+                new QRCode(qrElement, {
+                    text: url,
+                    width: 256,
+                    height: 256,
+                    colorDark: "#2a2421",
+                    colorLight: "#e5dfd6",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            }
         } else {
-          container.style.display = 'none';
+            container.style.display = 'none';
         }
       }
 
