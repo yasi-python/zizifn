@@ -1417,7 +1417,6 @@ function handleConfigPage(userID, hostName, proxyAddress, expDate, expTime) {
 }
 
 function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '', expTime = '') {
-  // Single configs for QR code and manual copy
   const singleXrayConfig = buildLink({
     core: 'xray', proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Xray`,
@@ -1427,31 +1426,41 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
     core: 'sb', proto: 'tls', userID, hostName,
     address: hostName, port: 443, tag: `${hostName}-Singbox`,
   });
-  
-  // Subscription URLs
+
   const subXrayUrl = `https://${hostName}/xray/${userID}`;
   const subSbUrl = `https://${hostName}/sb/${userID}`;
-  
-  // Deep-links for one-click import
+
   const clientUrls = {
-    // Universal Android link - many clients recognize this
     universalAndroid: `v2rayng://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    // Specific Android client
     karing: `karing://install-config?url=${encodeURIComponent(subXrayUrl)}`,
-    // iOS specific links
     shadowrocket: `shadowrocket://add/sub?url=${encodeURIComponent(subXrayUrl)}&name=${encodeURIComponent(hostName)}`,
     stash: `stash://install-config?url=${encodeURIComponent(subXrayUrl)}`,
     streisand: `streisand://import/${btoa(subXrayUrl)}`,
-    // Clash link using a converter
     clashMeta: `clash://install-config?url=${encodeURIComponent(`https://revil-sub.pages.dev/sub/clash-meta?url=${subSbUrl}&remote_config=&udp=false&ss_uot=false&show_host=false&forced_ws0rtt=true`)}`,
   };
 
   let expirationBlock = '';
   if (expDate && expTime) {
       const utcTimestamp = `${expDate}T${expTime.split('.')[0]}Z`;
-      expirationBlock = `<p id="expiration-display" data-utc-time="${utcTimestamp}">Loading expiration time...</p>`;
+      expirationBlock = `
+        <div class="expiration-card">
+          <div class="expiration-card-content">
+            <h2 class="expiration-title">Expiration Date</h2>
+            <hr class="expiration-divider">
+            <div id="expiration-display" data-utc-time="${utcTimestamp}">Loading expiration time...</div>
+          </div>
+        </div>
+      `;
   } else {
-      expirationBlock = '<p id="expiration-display">No expiration date set.</p>';
+      expirationBlock = `
+        <div class="expiration-card">
+          <div class="expiration-card-content">
+            <h2 class="expiration-title">Expiration Date</h2>
+            <hr class="expiration-divider">
+            <div id="expiration-display">No expiration date set.</div>
+          </div>
+        </div>
+      `;
   }
 
   const finalHTML = `<!doctype html>
@@ -1469,8 +1478,8 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
   </head>
   <body data-proxy-ip="${proxyAddress}">
     ${getPageHTML(singleXrayConfig, singleSingboxConfig, clientUrls, subXrayUrl, subSbUrl).replace(
-        '<p>Copy the configuration or import directly into your client</p>', 
-        `<p>Copy the configuration or import directly into your client</p>${expirationBlock}`
+        '', 
+        expirationBlock
     )}
     <script>${getPageScript()}</script>
   </body>
@@ -1507,7 +1516,7 @@ function getPageCSS() {
         --text-accent: #ffffff; --accent-primary: #be9b7b; --accent-secondary: #d4b595; --accent-tertiary: #8d6e5c;
         --accent-primary-darker: #8a6f56; --button-text-primary: #2a2421; --button-text-secondary: var(--text-primary);
         --shadow-color: rgba(0, 0, 0, 0.35); --shadow-color-accent: rgba(190, 155, 123, 0.4);
-        --border-radius: 8px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
+        --border-radius: 12px; --transition-speed: 0.2s; --transition-speed-fast: 0.1s; --transition-speed-medium: 0.3s; --transition-speed-long: 0.6s;
         --status-success: #70b570; --status-error: #e05d44; --status-warning: #e0bc44; --status-info: #4f90c4;
         --serif: "Aldine 401 BT Web", "Times New Roman", Times, Georgia, ui-serif, serif;
       --sans-serif: "Styrene B LC", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Noto Color Emoji", sans-serif;
@@ -1518,16 +1527,64 @@ function getPageCSS() {
         background-color: var(--background-primary); color: var(--text-primary);
         padding: 3rem; line-height: 1.5; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
       }
-      #expiration-display { font-size: 0.9em; text-align: center; color: var(--text-secondary); margin-top: 8px; }
-      #expiration-display span { display: block; margin-top: 4px; font-size: 0.9em; }
-      #expiration-display strong { color: var(--text-primary); }
+      
+      @keyframes rgb-animation {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .expiration-card {
+        position: relative;
+        padding: 3px;
+        background: var(--background-secondary);
+        border-radius: var(--border-radius);
+        margin-bottom: 24px;
+        overflow: hidden;
+        z-index: 1;
+      }
+      .expiration-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: conic-gradient(
+          #ff0000, #ff00ff, #0000ff, #00ffff, #00ff00, #ffff00, #ff0000
+        );
+        animation: rgb-animation 4s linear infinite;
+        z-index: -1;
+      }
+      .expiration-card-content {
+        background: var(--background-secondary);
+        padding: 20px;
+        border-radius: calc(var(--border-radius) - 3px);
+      }
+      .expiration-title {
+        font-family: var(--serif);
+        font-size: 1.6rem;
+        font-weight: 400;
+        text-align: center;
+        color: var(--accent-secondary);
+        margin: 0 0 12px 0;
+      }
+      .expiration-divider {
+        border: 0;
+        height: 1px;
+        background: var(--border-color);
+        margin: 0 auto 16px;
+        width: 80%;
+      }
+      #expiration-display { font-size: 0.9em; text-align: center; color: var(--text-secondary); }
+      #expiration-display span { display: block; margin-top: 8px; font-size: 0.9em; line-height: 1.6; }
+      #expiration-display strong { color: var(--text-primary); font-weight: 500; }
+
       .container {
         max-width: 800px; margin: 20px auto; padding: 0 12px; border-radius: var(--border-radius);
         box-shadow: 0 6px 15px rgba(0, 0, 0, 0.2), 0 0 25px 8px var(--shadow-color-accent);
         transition: box-shadow var(--transition-speed-medium) ease;
       }
       .container:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25), 0 0 35px 10px var(--shadow-color-accent); }
-      .header { text-align: center; margin-bottom: 40px; padding-top: 30px; }
+      .header { text-align: center; margin-bottom: 30px; padding-top: 30px; }
       .header h1 { font-family: var(--serif); font-weight: 400; font-size: 1.8rem; color: var(--text-accent); margin-top: 0px; margin-bottom: 2px; }
       .header p { color: var(--text-secondary); font-size: 0.6rem; font-weight: 400; }
       .config-card {
@@ -1856,7 +1913,6 @@ function getPageScript() {
                 container.innerHTML = "<p style='color:red; padding: 10px;'>Error: Subscription URL not provided.</p>";
                 return;
             }
-            // Clear previous QR code before generating a new one
             var qrElement = document.getElementById('qr-' + id);
             qrElement.innerHTML = ''; 
             if (!qrElement.hasChildNodes()) {
