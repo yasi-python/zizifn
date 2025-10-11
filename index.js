@@ -1446,6 +1446,7 @@ function generateBeautifulConfigPage(userID, hostName, proxyAddress, expDate = '
         <div class="expiration-card">
           <div class="expiration-card-content">
             <h2 class="expiration-title">Expiration Date</h2>
+            <div id="expiration-relative" class="expiration-relative-time"></div>
             <hr class="expiration-divider">
             <div id="expiration-display" data-utc-time="${utcTimestamp}">Loading expiration time...</div>
           </div>
@@ -1566,6 +1567,22 @@ function getPageCSS() {
         text-align: center;
         color: var(--accent-secondary);
         margin: 0 0 12px 0;
+      }
+      .expiration-relative-time {
+        text-align: center;
+        font-size: 1.1rem;
+        font-weight: 500;
+        margin-bottom: 12px;
+        padding: 4px 8px;
+        border-radius: 6px;
+      }
+      .expiration-relative-time.active {
+        color: var(--status-success);
+        background-color: rgba(112, 181, 112, 0.1);
+      }
+      .expiration-relative-time.expired {
+        color: var(--status-error);
+        background-color: rgba(224, 93, 68, 0.1);
       }
       .expiration-divider {
         border: 0;
@@ -2094,17 +2111,45 @@ function getPageScript() {
 
       function displayExpirationTimes() {
         const expElement = document.getElementById('expiration-display');
+        const relativeElement = document.getElementById('expiration-relative');
+
         if (!expElement || !expElement.dataset.utcTime) {
             if (expElement) expElement.textContent = 'Expiration time not available.';
+            if (relativeElement) relativeElement.style.display = 'none';
             return;
         }
 
         const utcDate = new Date(expElement.dataset.utcTime);
         if (isNaN(utcDate.getTime())) {
             expElement.textContent = 'Invalid expiration time format.';
+            if (relativeElement) relativeElement.style.display = 'none';
             return;
         }
          
+        // --- START: Relative Time Calculation ---
+        const now = new Date();
+        const diffSeconds = (utcDate.getTime() - now.getTime()) / 1000;
+        const isExpired = diffSeconds < 0;
+
+        const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+        let relativeTimeStr = '';
+
+        if (Math.abs(diffSeconds) < 60) {
+            relativeTimeStr = rtf.format(Math.round(diffSeconds), 'second');
+        } else if (Math.abs(diffSeconds) < 3600) {
+            relativeTimeStr = rtf.format(Math.round(diffSeconds / 60), 'minute');
+        } else if (Math.abs(diffSeconds) < 86400) {
+            relativeTimeStr = rtf.format(Math.round(diffSeconds / 3600), 'hour');
+        } else {
+            relativeTimeStr = rtf.format(Math.round(diffSeconds / 86400), 'day');
+        }
+
+        if (relativeElement) {
+            relativeElement.textContent = isExpired ? \`Expired \${relativeTimeStr}\` : \`Expires \${relativeTimeStr}\`;
+            relativeElement.classList.add(isExpired ? 'expired' : 'active');
+        }
+        // --- END: Relative Time Calculation ---
+
         const commonOptions = {
             year: 'numeric', month: 'long', day: 'numeric',
             hour: '2-digit', minute: '2-digit', second: '2-digit',
